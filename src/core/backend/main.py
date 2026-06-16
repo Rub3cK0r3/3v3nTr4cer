@@ -9,10 +9,9 @@ from uuid import uuid4
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from models.models import User, Event, Alert
-from models.schemas import EventResponse, EventCreate
-from models.base import Base
-from core.logs.logging_module.main import Logger
+from contracts.base_model import Base
+from contracts.events import Event,User,EventCreate,EventResponse
+from contracts.alerts import Alert
 from database import engine
 # services defined in events_service.py
 from events_service import (
@@ -25,9 +24,8 @@ SECRET_KEY = os.getenv("SECRET_KEY", "supersecretkey")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
-# Initialize FastAPI + logger
+# Initialize FastAPI
 app = FastAPI()
-audit_logger = Logger()
 
 def get_db():
     # Dependency: returns a database session and closes it automatically.
@@ -90,35 +88,29 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = 
     # Response: access_token and token_type
     user = authenticate_user(db, form_data.username, form_data.password)
     if not user:
-        audit_logger.warning(f"AUTH_FAIL username={form_data.username}")
         raise HTTPException(status_code=400, detail="Incorrect username or password")
 
     access_token = create_access_token(
         data={"sub": user.username},
         expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
     )
-    audit_logger.info(f"AUTH_SUCCESS username={user.username}")
     return {"access_token": access_token, "token_type": "bearer"}
 
 @app.get("/v1/events", response_model=List[EventResponse])
 def list_events(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     events = list_events_service(db)
-    audit_logger.info(f"LIST_EVENTS username={current_user.username} count={len(events)}")
     return events
 
 @app.get("/v1/events/{event_id}", response_model=EventResponse)
 def get_event(event_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     event = get_event_service(db, event_id)
     if not event:
-        audit_logger.warning(f"GET_EVENT_NOT_FOUND username={current_user.username} event_id={event_id}")
         raise HTTPException(status_code=404, detail="Event not found")
-    audit_logger.info(f"GET_EVENT username={current_user.username} event_id={event_id}")
     return event
 
 @app.post("/v1/events", response_model=EventResponse)
 def create_event(payload: EventCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     event = create_event_service(db, payload)
-    audit_logger.info(f"CREATE_EVENT username={current_user.username} event_id={event.id} severity={event.severity}")
     return event
 
 # Internal pipeline contracts (no auth, used by async workers)
@@ -183,7 +175,6 @@ def ingest_pipeline_event(payload: PipelineEventIn, db: Session = Depends(get_db
     db.commit()
     db.refresh(event)
 
-    audit_logger.info(f"PIPELINE_EVENT id={event.id} app={event.app_name} type={event.type}")
     return event
 
 
@@ -207,7 +198,6 @@ def ingest_pipeline_alert(payload: PipelineAlertIn, db: Session = Depends(get_db
     db.commit()
     db.refresh(alert)
 
-    audit_logger.info(f"PIPELINE_ALERT id={alert.id} severity={alert.severity}")
     return alert
 
 # Create database tables (development only)

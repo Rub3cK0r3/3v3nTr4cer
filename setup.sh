@@ -43,8 +43,6 @@ cd $SRC_DIR/deploy/ 2> $SRC_DIR/logs.txt;
 echo "Running all the containers.."
 docker compose up -d 2>&1 | tee $SRC_DIR/logs.txt;
 
-# TODO: Show where it is running to be able to kill the process
-
 ######################
 # Author : Rub3ck0r3 #
 ######################

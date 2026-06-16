@@ -6,7 +6,7 @@
 from typing import Any, Dict
 
 from core.async_lib.alert_engine.main import AlertManager as _AsyncAlertManager
-from core.async_lib.alert_engine.main import REQUIRED_ALERT_FIELDS
+from contracts.alerts import REQUIRED_ALERT_FIELDS
 
 class AlertManager:
     # Lightweight façade delegated to the async implementation for validation
@@ -25,4 +25,3 @@ class AlertManager:
 # this software under the terms of the MIT License.
 # See https://opensource.org/licenses/MIT for details.
 # ---------------------------------------------------------
-

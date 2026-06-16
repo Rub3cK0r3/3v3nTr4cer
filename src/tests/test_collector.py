@@ -1,11 +1,14 @@
 import unittest
-from core.async_lib.collector.main import AsyncCollector, REQUIRED_EVENT_FIELDS
+from core.async_lib.collector.main import AsyncCollector
+from contracts.events import REQUIRED_EVENT_FIELDS
 class TestCollectorValidation(unittest.TestCase):
     def test_validate_event_success(self):
         # db_dsn is required by the async implementation but unused for validation
         collector = AsyncCollector(db_dsn="postgresql://user:pass@localhost:5432/testdb")
 
         valid_event = {
+            "id": "evt-123",
+            "app_name": "my_service",
             "type": "test_event",
             "payload": {"foo": "bar"},
         }
@@ -19,7 +22,7 @@ class TestCollectorValidation(unittest.TestCase):
             "type": "test_event",
         }
 
-        # Missing required "payload" field
+        # Missing required fields
         self.assertFalse(collector._validate_event(invalid_event))
 
     def test_required_event_fields_constant(self):

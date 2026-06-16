@@ -56,6 +56,8 @@ class TestAsyncPipelineIntegration(unittest.TestCase):
         # The mock_client.post should have been called with both /internal/pipeline/alerts and /internal/pipeline/events
         alert_calls = [call for call in mock_client.post.call_args_list if '/alerts' in str(call)]
         event_calls = [call for call in mock_client.post.call_args_list if '/events' in str(call)]
+
+        
         
         self.assertEqual(len(alert_calls), 3, f"Expected 3 alert calls, got {len(alert_calls)}")
         self.assertGreaterEqual(len(event_calls), 5, f"Expected at least 5 event calls, got {len(event_calls)}")

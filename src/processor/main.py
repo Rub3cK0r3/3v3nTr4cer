@@ -15,7 +15,7 @@ class Processor:
 
     def _validate_event(self, event: Dict[str, Any]) -> bool:
         # Delegate validation to the underlying async processor's logic.
-        from core.async_lib.processor.main import REQUIRED_EVENT_FIELDS
+        from contracts.events import REQUIRED_EVENT_FIELDS
         return all(field in event for field in REQUIRED_EVENT_FIELDS)
 
 # ---------------------------------------------------------

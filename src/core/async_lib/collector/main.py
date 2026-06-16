@@ -2,17 +2,12 @@ import asyncio
 import json
 import os
 import signal
-
 import asyncpg
 import httpx
-
+from contracts.events import REQUIRED_EVENT_FIELDS
 # import AsyncManager so we need it as Base Class in our Implementation
 # for better scalability
 from core.async_lib.async_manager import AsyncManager
-
-# Sanity fields check...
-REQUIRED_EVENT_FIELDS = ["type", "payload"]
-
 class AsyncCollector:
     # The AsyncCollector core class is a class that
     # handles the behaviour of a Data Collector before
@@ -46,7 +41,7 @@ class AsyncCollector:
 
     async def _listener_loop(self):
         # LISTENS channel 'events_channel' in PostgreSQL
-        # TODO: Implement it so we can also use several db types
+        # Implement it so we can also use several db types
         while not self.async_manager.shutdown_event.is_set():
             try:
                 async with self.db_pool.acquire() as conn:

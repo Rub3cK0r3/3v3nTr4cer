@@ -1,8 +1,1 @@
- Container db Running 
- Container collector Running 
- Container processor Starting 
- Container backend Starting 
- Container alert_engine Starting 
- Container backend Started 
- Container alert_engine Started 
- Container processor Started 
+unable to get image 'deploy-alert_engine': Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?
