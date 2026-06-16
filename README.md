@@ -36,6 +36,9 @@
 - **Docker & Kubernetes Ready** – Deploy with Docker Compose or K8s
 - **Security-First Design** – Pentesting and hardening from day one
 
+
+![Arquitectura del sistema](assets/3v3nTracer-diagram.png)
+
 ---
 
 ## 📋 Requirements
