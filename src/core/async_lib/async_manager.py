@@ -39,10 +39,10 @@ class AsyncManager:
         # to the provided handler coroutine until shutdown is triggered
         # and the queue is fully drained.
         while not self.shutdown_event.is_set() or not self.queue.empty():
+            item = None
             try:
                 item = await asyncio.wait_for(self.queue.get(), timeout=1)
                 await handler(item)
-                self.queue.task_done()
 
             except asyncio.TimeoutError:
                 # Allows periodic shutdown checks
@@ -50,6 +50,10 @@ class AsyncManager:
 
             except Exception as e:
                 print("AsyncManager worker error:", e)
+
+            finally:
+                if item is not None:
+                    self.queue.task_done()
 
     async def enqueue(self, item):
         # Enqueues an item into the internal queue.

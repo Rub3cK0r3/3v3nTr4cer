@@ -9,8 +9,6 @@
 
 `3v3nTr4cer` is a **backend-first framework** for handling **event-pipelines** in Python. It enables collecting events from enterprise systems, processing them asynchronously, storing secure logs, and generating alerts — all from the command line. Designed to be secure, deployable via Docker, with full traceability for auditing.
 
----
-
 ## 📋 Table of Contents
 
 - [Features](#-features)
@@ -24,8 +22,6 @@
 - [Security](#-security)
 - [License](#-license)
 
----
-
 ## ✨ Features
 
 - **Asynchronous Event Ingestion** – Reliable async event collection
@@ -38,8 +34,6 @@
 
 
 ![Arquitectura del sistema](assets/3v3nTracer-diagram.png)
-
----
 
 ## 📋 Requirements
 
@@ -55,8 +49,6 @@
 - Linux (Ubuntu 20.04+, Debian 11+, CentOS 8+)
 - macOS (12.0+)
 - Windows 10/11 (with WSL2 recommended)
-
----
 
 ## 🚀 Installation
 
@@ -224,8 +216,9 @@ flake8 src
 ### 6.1 Run test suite
 
 ```bash
-cd src
-python -m unittest discover -s tests -p "test_*.py"
+cd /home/ruben/Desktop/github_repos/3v3nTr4cer
+source .venv/bin/activate
+PYTHONPATH=src python -m unittest discover -s src/tests -v
 ```
 
 ### 6.2 Included tests
@@ -234,6 +227,9 @@ python -m unittest discover -s tests -p "test_*.py"
 - `src/tests/test_alert_manager.py` – alert threshold and validation
 - `src/tests/test_integration.py` – pipeline integration
 - `src/tests/test_processor.py` – processor validator wrapper
+- `src/tests/test_async_manager.py` – async queue management
+- `src/tests/test_collector_async.py` – async collector API/WebSocket handling
+- `src/tests/test_processor_async.py` – async processor handling
 
 ## 7. License
 

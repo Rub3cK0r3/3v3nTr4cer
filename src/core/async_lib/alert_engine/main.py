@@ -1,8 +1,13 @@
+from __future__ import annotations
+
 import os
-import asyncpg
 import httpx
+from typing import TYPE_CHECKING
 # Sanity checks in this frontier too...
 from contracts.alerts import REQUIRED_ALERT_FIELDS,SEVERITY_LEVELS
+
+if TYPE_CHECKING:
+    import asyncpg
 class AlertManager:
     # Handles asynchronous processing of alert events.
     # Responsibilities:
@@ -14,7 +19,7 @@ class AlertManager:
     #     - PostgreSQL listeners
     #     - Application lifecycle
 
-    def __init__(self, db_pool: asyncpg.pool.Pool | None = None, backend_base_url: str | None = None):
+    def __init__(self, db_pool: "asyncpg.pool.Pool" | None = None, backend_base_url: str | None = None):
         # Initializes the AlertManager.
         # Args:
         #     db_pool (asyncpg.pool.Pool | None): Kept for backwards compatibility but no longer used.
