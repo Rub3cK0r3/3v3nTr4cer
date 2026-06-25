@@ -1,7 +1,7 @@
 import asyncio
 import os
 import unittest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from alert_engine.main import AlertManager
 from core.async_lib.alert_engine.main import AlertManager as AsyncAlertManager
@@ -36,7 +36,9 @@ class TestAsyncAlertManagerThresholds(unittest.TestCase):
     def test_default_threshold_sends_error_and_fatal(self, mock_client_cls):
         mock_client = AsyncMock()
         mock_client.__aenter__.return_value = mock_client
-        mock_client.post.return_value = AsyncMock(status_code=200)
+        mock_response = MagicMock(status_code=200)
+        mock_response.raise_for_status = MagicMock()
+        mock_client.post.return_value = mock_response
         mock_client_cls.return_value = mock_client
 
         am = AsyncAlertManager()

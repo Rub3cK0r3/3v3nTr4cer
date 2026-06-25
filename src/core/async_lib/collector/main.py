@@ -1,10 +1,15 @@
+from __future__ import annotations
+
 import asyncio
 import json
 import os
 import signal
-import asyncpg
 import httpx
+from typing import TYPE_CHECKING
 from contracts.events import REQUIRED_EVENT_FIELDS
+
+if TYPE_CHECKING:
+    import asyncpg
 # import AsyncManager so we need it as Base Class in our Implementation
 # for better scalability
 from core.async_lib.async_manager import AsyncManager

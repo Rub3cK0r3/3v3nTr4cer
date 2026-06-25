@@ -1,8 +1,13 @@
+from __future__ import annotations
+
 import os
-import asyncpg
 import httpx
+from typing import TYPE_CHECKING
 # Sanity checks in this frontier too...
 from contracts.events import REQUIRED_EVENT_FIELDS
+
+if TYPE_CHECKING:
+    import asyncpg
 class EventProcessor: 
     # Handles business logic for processing events asynchronously.
     #
@@ -18,7 +23,7 @@ class EventProcessor:
     #     - Application lifecycle
     # 
 
-    def __init__(self, db_pool: asyncpg.pool.Pool | None = None, backend_base_url: str | None = None): 
+    def __init__(self, db_pool: "asyncpg.pool.Pool" | None = None, backend_base_url: str | None = None): 
         # Initializes the EventProcessor.
         # Args:
         #     db_pool (asyncpg.pool.Pool | None): Kept for backwards compatibility but no longer used.
