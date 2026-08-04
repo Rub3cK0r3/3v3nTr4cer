@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from contracts.base_model import Base
-from contracts.events import Event,User,EventCreate,EventResponse
+from contracts.events import Event,User,EventCreate,EventResponse,DeadLetterEvent
 from contracts.alerts import Alert
 from database import engine
 # services defined in events_service.py
@@ -128,6 +128,26 @@ class PipelineEventIn(BaseModel):
     resource: Optional[str] = None
     referrer: Optional[str] = None
 
+
+class DeadLetterEventIn(BaseModel):
+    """
+    DTO used by the processor to persist an event in the DLQ.
+
+    The original payload is preserved intact, and diagnostic metadata such as
+    retries and last_error is attached for later inspection.
+    """
+    id: Optional[str] = None
+    app_name: Optional[str] = None
+    type: str
+    payload: Dict[str, Any]
+    severity: Optional[str] = None
+    timestamp: Optional[int] = None
+    resource: Optional[str] = None
+    referrer: Optional[str] = None
+    retries: int = 0
+    last_error: Optional[str] = None
+
+
 class PipelineAlertIn(BaseModel):
     id: Optional[str] = None
     severity: str
@@ -176,6 +196,43 @@ def ingest_pipeline_event(payload: PipelineEventIn, db: Session = Depends(get_db
     db.refresh(event)
 
     return event
+
+
+@app.post("/internal/pipeline/dead-letter-events")
+def ingest_dead_letter_event(payload: DeadLetterEventIn, db: Session = Depends(get_db)):
+    """
+    Store a failed event in the PostgreSQL dead-letter queue.
+
+    This endpoint not only persists the message, but also preserves the failure
+    context. In a real broker-based implementation, this would correspond to
+    routing the message to a dedicated error queue. Here, it is implemented as
+    a normal database table to keep the system simple and fully auditable.
+    """
+    now_ms = int(datetime.utcnow().timestamp() * 1000)
+
+    dead_letter_id = payload.id or payload.payload.get("id") or str(uuid4())
+    original_event_id = payload.payload.get("id") or payload.id or dead_letter_id
+
+    dead_letter_item = DeadLetterEvent(
+        id=dead_letter_id,
+        original_event_id=original_event_id,
+        app_name=payload.app_name or payload.payload.get("app_name") or "unknown-app",
+        event_type=payload.type,
+        severity=payload.severity or payload.payload.get("severity", "error"),
+        payload=payload.payload,
+        retries=payload.retries,
+        last_error=payload.last_error,
+        timestamp=payload.timestamp or payload.payload.get("timestamp"),
+        resource=payload.resource or payload.payload.get("resource"),
+        referrer=payload.referrer or payload.payload.get("referrer"),
+        dead_lettered_at=now_ms,
+    )
+
+    db.add(dead_letter_item)
+    db.commit()
+    db.refresh(dead_letter_item)
+
+    return dead_letter_item
 
 
 @app.post("/internal/pipeline/alerts")

@@ -32,3 +32,23 @@ class TestEventProcessor(unittest.IsolatedAsyncioTestCase):
         await processor.handle(event)
 
         mock_client_cls.return_value.post.assert_not_awaited()
+
+    @patch("core.async_lib.processor.main.httpx.AsyncClient")
+    async def test_handle_routes_event_to_dead_letter_after_retries(self, mock_client_cls):
+        mock_client = AsyncMock()
+        mock_client.__aenter__.return_value = mock_client
+        mock_client.post.side_effect = Exception("boom")
+        mock_client_cls.return_value = mock_client
+
+        processor = EventProcessor()
+        processor._persist_dead_letter = AsyncMock()
+        event = {"id": "3", "app_name": "App", "type": "T", "payload": {}}
+
+        await processor.handle(event)
+
+        self.assertEqual(mock_client.post.await_count, 3)
+        processor._persist_dead_letter.assert_awaited_once()
+        args, kwargs = processor._persist_dead_letter.await_args
+        self.assertEqual(args[0], event)
+        self.assertIn("retries", kwargs)
+        self.assertEqual(kwargs["retries"], 3)
