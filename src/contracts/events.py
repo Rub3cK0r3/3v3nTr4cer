@@ -75,6 +75,36 @@ class EventResponse(BaseModel):
         "from_attributes": True 
     }
 
+
+class DeadLetterEvent(Base):
+    """
+    Registro duradero para eventos que ya no pueden procesarse.
+
+    Esta tabla funciona como una dead-letter queue (DLQ) en PostgreSQL: en vez
+    de perder el mensaje tras agotar los reintentos, lo guardamos con contexto
+    de fallo (número de reintentos, último error, payload original y metadatos).
+    """
+    __tablename__ = "dead_letter_events"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    original_event_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    app_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    event_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    severity: Mapped[str] = mapped_column(String(10), nullable=False)
+    payload: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    retries: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_error: Mapped[str | None] = mapped_column(Text)
+    timestamp: Mapped[int | None] = mapped_column(BigInteger)
+    resource: Mapped[str | None] = mapped_column(Text)
+    referrer: Mapped[str | None] = mapped_column(Text)
+    dead_lettered_at: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+
+Index("idx_dead_letter_app_name", DeadLetterEvent.app_name)
+Index("idx_dead_letter_severity", DeadLetterEvent.severity)
+Index("idx_dead_letter_dead_lettered_at", DeadLetterEvent.dead_lettered_at)
+
+
 class EventCreate(BaseModel):
     severity: str
     stack: Optional[str] = None
