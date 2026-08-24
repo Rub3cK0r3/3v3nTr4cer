@@ -12,9 +12,9 @@ from sqlalchemy.orm import Session
 from contracts.base_model import Base
 from contracts.events import Event,User,EventCreate,EventResponse,DeadLetterEvent
 from contracts.alerts import Alert
-from database import engine
+from core.backend.database import engine
 # services defined in events_service.py
-from events_service import (
+from core.backend.events_service import (
     list_events as list_events_service,
     get_event as get_event_service,
     create_event as create_event_service,

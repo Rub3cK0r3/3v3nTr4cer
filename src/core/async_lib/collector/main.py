@@ -5,11 +5,9 @@ import json
 import os
 import signal
 import httpx
-from typing import TYPE_CHECKING
+import asyncpg
 from contracts.events import REQUIRED_EVENT_FIELDS
 
-if TYPE_CHECKING:
-    import asyncpg
 # import AsyncManager so we need it as Base Class in our Implementation
 # for better scalability
 from core.async_lib.async_manager import AsyncManager
@@ -35,13 +33,13 @@ class AsyncCollector:
         self.backend_base_url = backend_base_url or os.getenv("BACKEND_BASE_URL", "http://backend:8000")
 
     async def start(self):
-        #Initialize events DB pool, workers and listener 
+        # Initialize events DB pool, workers and listener
         self.db_pool = await asyncpg.create_pool(dsn=self.db_dsn)
 
-        # Iniciar workers (procesan eventos)
+        # Start workers (process events)
         await self.async_manager.start(self._process_event)
 
-        # Lanzar listener PostgreSQL
+        # Start PostgreSQL listener
         self.listener_task = asyncio.create_task(self._listener_loop())
 
     async def _listener_loop(self):
