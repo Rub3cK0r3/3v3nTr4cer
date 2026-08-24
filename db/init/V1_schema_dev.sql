@@ -49,8 +49,12 @@ CREATE TABLE events (
     type VARCHAR(100),                         -- error type or classification
     timestamp BIGINT NOT NULL,                -- client timestamp (ms)
     received_at BIGINT NOT NULL,              -- server receive timestamp (ms)
-    resource TEXT,                             -- resource causing error
-    referrer TEXT,                             -- HTTP referrer
+    -- The affected application resource, such as a route, endpoint, file,
+    -- service, or other component where the event occurred.
+    resource TEXT,
+    -- The URL or page that referred the request to the affected resource.
+    -- This describes the event origin, not the resource that failed.
+    referrer TEXT,
 
     -- App metadata
     app_name VARCHAR(255) NOT NULL,          
