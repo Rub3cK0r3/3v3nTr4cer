@@ -31,3 +31,24 @@ class TestAsyncManager(unittest.IsolatedAsyncioTestCase):
         await manager.stop()
 
         self.assertTrue(manager.queue.empty())
+
+    async def test_none_is_processed_and_queue_is_drained(self):
+        manager = AsyncManager(worker_count=1, max_queue_size=10)
+        processed = []
+
+        async def handler(item):
+            processed.append(item)
+
+        await manager.start(handler)
+        await manager.enqueue(None)
+        await manager.stop()
+
+        self.assertEqual(processed, [None])
+        self.assertTrue(manager.queue.empty())
+
+    def test_rejects_invalid_configuration(self):
+        with self.assertRaises(ValueError):
+            AsyncManager(worker_count=0)
+
+        with self.assertRaises(ValueError):
+            AsyncManager(max_queue_size=0)

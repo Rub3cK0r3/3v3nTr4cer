@@ -13,8 +13,16 @@ from typing import Dict, Optional
 from pydantic import BaseModel
 from .base_model import Base
 
-# In order to be able to do Sanity checks 
+# In order to be able to do Sanity checks, this list contains the required fields for an event to be valid. If any of these fields is missing, the event will be rejected.
+# They are just some of the fields that the Event model has, but they are the most important ones. The rest of the fields are optional and can be missing.
 REQUIRED_EVENT_FIELDS = ["id", "app_name", "type", "payload"]
+
+# SPOILER: All these Models are used in the API endpoints, but they are not used in the database. 
+# The database models are defined in the 'Event' and 'DeadLetterEvent' classes. 
+# The 'EventCreate' and 'EventResponse' classes are used to validate the data that is sent to and received from the API endpoints.
+# Also as expected, they all portray the same data structure, but they are used in different contexts. The 'EventCreate' class is used to 
+# validate the data that is sent to the API endpoint when creating a new event, while the 'EventResponse' class is used to validate the data that 
+# is received from the API endpoint when retrieving an event.
 
 class Event(Base):
     __tablename__ = "events"
@@ -78,6 +86,8 @@ class EventResponse(BaseModel):
 
 class DeadLetterEvent(Base):
     """
+    Comment block in Spanish:
+
     Registro duradero para eventos que ya no pueden procesarse.
 
     Esta tabla funciona como una dead-letter queue (DLQ) en PostgreSQL: en vez
@@ -127,9 +137,7 @@ class EventCreate(BaseModel):
     endpoint_user_agent: Optional[str] = None
     endpoint_device_type: Optional[str] = None
 
-#######################################################################
-# I introduce here the User model based on what we could use in the db
-#######################################################################
+# User model for authentication and authorization
 class User(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True, index=True)

@@ -7,13 +7,17 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.dialects.postgresql import JSONB
 
-# In order to be able to do sanity checks for alerts..
+# In order to be able to do sanity checks for alerts. 
+# There are a lot more fields that can be added to an alert, but 
+# these are the minimum required fields for an alert to be valid.
 REQUIRED_ALERT_FIELDS = ["id", "severity", "resource"]
 
-# Optional sanity checks
+# Other sanity checks..
 ALERT_SEVERITIES = {"error", "fatal"}
 
 # Severity ordering for threshold-based alerting
+# This is used to determine if an alert is above a certain threshold. For example, if the threshold is 
+# set to "warning", then any alert with a severity of "error" or "fatal" would be considered above the threshold.
 SEVERITY_LEVELS = {
     "debug": 10,
     "info": 20,
