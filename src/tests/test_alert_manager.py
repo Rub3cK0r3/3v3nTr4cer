@@ -58,7 +58,9 @@ class TestAsyncAlertManagerThresholds(unittest.TestCase):
     def test_configurable_min_severity(self, mock_client_cls):
         mock_client = AsyncMock()
         mock_client.__aenter__.return_value = mock_client
-        mock_client.post.return_value = AsyncMock(status_code=200)
+        mock_response = MagicMock(status_code=200)
+        mock_response.raise_for_status = MagicMock()
+        mock_client.post.return_value = mock_response
         mock_client_cls.return_value = mock_client
 
         os.environ["ALERT_MIN_SEVERITY"] = "warning"
