@@ -3,6 +3,7 @@ from psycopg2.extensions import connection, cursor
 import os
 import time
 from urllib.parse import quote_plus
+from loguru import logger
 
 class DBConnection:
     conn: connection
@@ -34,7 +35,7 @@ class DBConnection:
                 cur = self._listen(conn)
                 return conn, cur
             except Exception as e:
-                print("DBConnection ERROR:", e)
+                logger.bind(pipeline_stage="database").error("Database connection failed: {}", e)
                 time.sleep(5)
 
     def reconnect(self) -> None:
@@ -46,15 +47,14 @@ class DBConnection:
                 self.cur.close()
             if hasattr(self, 'conn') and self.conn is not None:
                 self.conn.close()
-            print("DBConnection closed successfully.")
+            logger.bind(pipeline_stage="database").info("Database connection closed")
         except Exception as e:
-            print("Error closing DBConnection:", e)
+            logger.bind(pipeline_stage="database").error("Database connection close failed: {}", e)
 
 if __name__ == "__main__":
-    print("Testing DB connection...")
     db = DBConnection()
-    print("Connected to DB:", db.conn)
+    logger.bind(pipeline_stage="database").info("Database connection established")
     db.cur.execute("SELECT version();")
     version = db.cur.fetchone()
-    print("PostgreSQL version:", version)
+    logger.bind(pipeline_stage="database").info("PostgreSQL version: {}", version)
 

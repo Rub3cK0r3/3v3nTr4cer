@@ -28,6 +28,7 @@ services:
       # of the containers, we have to improve this and test it..
       DATABASE_URL: postgresql://devuser:devpass@db:5432/eventdb
       SECRET_KEY: dev-secret-key
+      INTERNAL_TOKEN: dev-internal-token
     ports:
       - "8000:8000"
 
@@ -40,6 +41,8 @@ services:
       - db
     environment:
       DATABASE_URL: postgresql://devuser:devpass@db:5432/eventdb
+      BACKEND_BASE_URL: http://backend:8000
+      INTERNAL_TOKEN: dev-internal-token
     ports:
       - "8001:8001"
 
@@ -52,6 +55,8 @@ services:
       - db
     environment:
       DATABASE_URL: postgresql://devuser:devpass@db:5432/eventdb
+      BACKEND_BASE_URL: http://backend:8000
+      INTERNAL_TOKEN: dev-internal-token
     ports:
       - "8002:8002"
 
@@ -64,6 +69,8 @@ services:
       - db
     environment:
       DATABASE_URL: postgresql://devuser:devpass@db:5432/eventdb
+      BACKEND_BASE_URL: http://backend:8000
+      INTERNAL_TOKEN: dev-internal-token
     ports:
       - "8003:8003"
 

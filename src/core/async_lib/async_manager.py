@@ -1,4 +1,5 @@
 import asyncio
+from loguru import logger
 
 # Not to use a flag to indicate that an item was not retrieved from the queue, we use a unique sentinel object. 
 # I think this avoids potential issues with falsy values (like None, 0, or empty strings) that could be valid items in the queue.
@@ -69,7 +70,7 @@ class AsyncManager:
                 continue
 
             except Exception as e:
-                print("AsyncManager worker error:", e)
+                logger.bind(pipeline_stage="worker").exception("AsyncManager worker error: {}", e)
                 # The handler owns retry logic, so we just log the error and continue processing other items.
             finally:
                 if item is not _ITEM_NOT_RETRIEVED:

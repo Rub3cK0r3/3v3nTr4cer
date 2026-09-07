@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import os
+import asyncio
 import httpx
 from typing import TYPE_CHECKING, Any
+from loguru import logger
 
 # Sanity checks in this frontier too...
 from contracts.events import REQUIRED_EVENT_FIELDS
@@ -31,6 +33,7 @@ class EventProcessor:
         db_pool: "asyncpg.pool.Pool | None" = None,
         backend_base_url: str | None = None,
         max_retries: int = 3,
+        retry_backoff_seconds: float | None = None,
     ):
         """
         Initialize the processor.
@@ -44,6 +47,10 @@ class EventProcessor:
         self.db_pool = db_pool
         self.backend_base_url = backend_base_url or os.getenv("BACKEND_BASE_URL", "http://backend:8000")
         self.max_retries = max(1, max_retries)
+        self.retry_backoff_seconds = retry_backoff_seconds if retry_backoff_seconds is not None else float(
+            os.getenv("RETRY_BACKOFF_SECONDS", "0.5")
+        )
+        self.internal_token = os.getenv("INTERNAL_TOKEN", "")
         self.dead_letter_endpoint = "/internal/pipeline/dead-letter-events"
 
     async def handle(self, event: dict[str, Any]):
@@ -55,7 +62,9 @@ class EventProcessor:
         recorded in the DLQ.
         """
         if not self._validate_event(event):
-            print("Invalid event, skipping:", event)
+            logger.bind(event_id=event.get("id"), app_name=event.get("app_name"), pipeline_stage="validation").warning(
+                "Invalid event skipped"
+            )
             return
 
         await self._process_with_retries(event)
@@ -75,25 +84,26 @@ class EventProcessor:
             try:
                 await self._insert_event(event)
                 return
-            except Exception as exc:
+            except NonRecoverableError as exc:
+                logger.bind(event_id=event.get("id"), app_name=event.get("app_name"), retry_count=attempt, pipeline_stage="processing").error(
+                    "Non-recoverable event failure: {}", exc
+                )
+                await self._persist_dead_letter(event, retries=attempt, error=str(exc))
+                return
+            except RecoverableError as exc:
                 last_error = exc
                 if attempt >= self.max_retries:
-                    print(
-                        "Event %s exhausted %s retries; moving to dead-letter queue: %s",
-                        event.get("id"),
-                        self.max_retries,
-                        exc,
+                    logger.bind(event_id=event.get("id"), app_name=event.get("app_name"), retry_count=attempt, pipeline_stage="dlq").error(
+                        "Retry budget exhausted; moving event to dead-letter queue: {}", exc
                     )
                     await self._persist_dead_letter(event, retries=attempt, error=str(exc))
                     return
 
-                print(
-                    "Event %s failed on attempt %s/%s: %s. Retrying.",
-                    event.get("id"),
-                    attempt,
-                    self.max_retries,
-                    exc,
+                delay = min(self.retry_backoff_seconds * (2 ** (attempt - 1)), 60.0)
+                logger.bind(event_id=event.get("id"), app_name=event.get("app_name"), retry_count=attempt, pipeline_stage="processing").warning(
+                    "Recoverable event failure; retrying in {} seconds: {}", delay, exc
                 )
+                await asyncio.sleep(delay)
 
         # This point should only be reached if the loop exits unexpectedly.
         # In that case, the event is still preserved in the DLQ with the last
@@ -120,14 +130,20 @@ class EventProcessor:
                     "resource": event.get("resource"),
                     "referrer": event.get("referrer"),
                 }
-                response = await client.post("/internal/pipeline/events", json=payload)
-                response.raise_for_status()
-
-            print(f"Processed event via API: {event.get('id')}")
+                response = await client.post(
+                    "/internal/pipeline/events", json=payload, headers=self._internal_headers()
+                )
+                try:
+                    response.raise_for_status()
+                except httpx.HTTPStatusError as exc:
+                    if 400 <= response.status_code < 500 and response.status_code not in {408, 429}:
+                        raise NonRecoverableError(str(exc)) from exc
+                    raise RecoverableError(str(exc)) from exc
 
         except Exception as exc:
-            print(f"API write failed for event {event.get('id')}: {exc}")
-            raise
+            if isinstance(exc, (NonRecoverableError, RecoverableError)):
+                raise
+            raise RecoverableError(str(exc)) from exc
 
     async def _persist_dead_letter(self, event: dict[str, Any], retries: int, error: str):
         """
@@ -151,18 +167,19 @@ class EventProcessor:
                     "retries": retries,
                     "last_error": error,
                 }
-                response = await client.post(self.dead_letter_endpoint, json=payload)
+                response = await client.post(
+                    self.dead_letter_endpoint, json=payload, headers=self._internal_headers()
+                )
                 response.raise_for_status()
-
-            print(
-                "Moved event %s to dead-letter queue after %s retries.",
-                event.get("id"),
-                retries,
-            )
         except Exception as exc:
             # The DLQ is a resilience measure. If its persistence fails, we log
             # it so the diagnostic information is not lost.
-            print(f"Dead-letter persistence failed for event {event.get('id')}: {exc}")
+            logger.bind(event_id=event.get("id"), app_name=event.get("app_name"), retry_count=retries, pipeline_stage="dlq").error(
+                "Dead-letter persistence failed: {}", exc
+            )
+
+    def _internal_headers(self) -> dict[str, str]:
+        return {"X-Internal-Token": self.internal_token} if self.internal_token else {}
 
     def _validate_event(self, event: dict[str, Any]) -> bool:
         """
@@ -175,3 +192,11 @@ class EventProcessor:
             True if the event is valid, False otherwise.
         """
         return all(field in event for field in REQUIRED_EVENT_FIELDS)
+
+
+class RecoverableError(Exception):
+    """A processing failure that may succeed on a later attempt."""
+
+
+class NonRecoverableError(Exception):
+    """A processing failure that should be persisted directly in the DLQ."""

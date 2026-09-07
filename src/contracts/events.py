@@ -10,7 +10,9 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.dialects.postgresql import JSONB
 from typing import Dict, Optional
+from uuid import uuid4
 from pydantic import BaseModel
+from pydantic import Field
 from .base_model import Base
 
 # In order to be able to do Sanity checks, this list contains the required fields for an event to be valid. If any of these fields is missing, the event will be rejected.
@@ -116,6 +118,7 @@ Index("idx_dead_letter_dead_lettered_at", DeadLetterEvent.dead_lettered_at)
 
 
 class EventCreate(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid4()))
     severity: str
     stack: Optional[str] = None
     type: Optional[str] = None

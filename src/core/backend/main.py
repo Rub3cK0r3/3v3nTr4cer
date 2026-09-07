@@ -1,5 +1,5 @@
 import os
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, Header, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -8,7 +8,9 @@ from typing import Any, Dict, List, Optional
 from uuid import uuid4
 from pydantic import BaseModel
 from sqlalchemy import select
+from sqlalchemy import text
 from sqlalchemy.orm import Session
+from loguru import logger
 from contracts.base_model import Base
 from contracts.events import Event,User,EventCreate,EventResponse,DeadLetterEvent
 from contracts.alerts import Alert
@@ -19,6 +21,8 @@ from core.backend.events_service import (
     get_event as get_event_service,
     create_event as create_event_service,
 )
+
+INTERNAL_TOKEN = os.getenv("INTERNAL_TOKEN", "")
 # Database URL, JWT secret key, algorithm, and token expiry
 SECRET_KEY = os.getenv("SECRET_KEY", "supersecretkey")
 ALGORITHM = "HS256"
@@ -26,6 +30,32 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 # Initialize FastAPI
 app = FastAPI()
+
+
+@app.get("/health")
+def health() -> dict[str, str]:
+    """Return process health without contacting PostgreSQL."""
+    return {"status": "ok"}
+
+
+@app.get("/ready")
+def ready() -> dict[str, str]:
+    """Report whether the backend can establish a database connection."""
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+    except Exception as exc:
+        logger.bind(pipeline_stage="readiness").warning("Database is not ready: {}", exc)
+        raise HTTPException(status_code=503, detail="Database is not ready") from exc
+    return {"status": "ok"}
+
+
+def require_internal_token(
+    x_internal_token: str | None = Header(default=None),
+) -> None:
+    """Authorize calls from trusted pipeline components using a shared secret."""
+    if not INTERNAL_TOKEN or x_internal_token != INTERNAL_TOKEN:
+        raise HTTPException(status_code=401, detail="Invalid internal token")
 
 def get_db():
     # Dependency: returns a database session and closes it automatically.
@@ -155,7 +185,7 @@ class PipelineAlertIn(BaseModel):
     payload: Dict[str, Any] = {}
 
 
-@app.post("/internal/pipeline/events")
+@app.post("/internal/pipeline/events", dependencies=[Depends(require_internal_token)])
 def ingest_pipeline_event(payload: PipelineEventIn, db: Session = Depends(get_db)):
     # Internal endpoint used by async pipeline components to persist events.
     # It maps a minimal event structure into the richer Event model expected
@@ -191,6 +221,13 @@ def ingest_pipeline_event(payload: PipelineEventIn, db: Session = Depends(get_db
         endpoint_device_type=payload.payload.get("endpoint_device_type"),
     )
 
+    existing_event = db.get(Event, event_id)
+    if existing_event is not None:
+        logger.bind(event_id=event_id, app_name=app_name, pipeline_stage="ingestion").info(
+            "Duplicate event ignored"
+        )
+        return existing_event
+
     db.add(event)
     db.commit()
     db.refresh(event)
@@ -198,7 +235,7 @@ def ingest_pipeline_event(payload: PipelineEventIn, db: Session = Depends(get_db
     return event
 
 
-@app.post("/internal/pipeline/dead-letter-events")
+@app.post("/internal/pipeline/dead-letter-events", dependencies=[Depends(require_internal_token)])
 def ingest_dead_letter_event(payload: DeadLetterEventIn, db: Session = Depends(get_db)):
     """
     Store a failed event in the PostgreSQL dead-letter queue.
@@ -228,6 +265,10 @@ def ingest_dead_letter_event(payload: DeadLetterEventIn, db: Session = Depends(g
         dead_lettered_at=now_ms,
     )
 
+    existing_item = db.get(DeadLetterEvent, dead_letter_id)
+    if existing_item is not None:
+        return existing_item
+
     db.add(dead_letter_item)
     db.commit()
     db.refresh(dead_letter_item)
@@ -235,7 +276,7 @@ def ingest_dead_letter_event(payload: DeadLetterEventIn, db: Session = Depends(g
     return dead_letter_item
 
 
-@app.post("/internal/pipeline/alerts")
+@app.post("/internal/pipeline/alerts", dependencies=[Depends(require_internal_token)])
 def ingest_pipeline_alert(payload: PipelineAlertIn, db: Session = Depends(get_db)):
     # Internal endpoint used by async pipeline components to persist alerts.
 
@@ -256,6 +297,3 @@ def ingest_pipeline_alert(payload: PipelineAlertIn, db: Session = Depends(get_db
     db.refresh(alert)
 
     return alert
-
-# Create database tables (development only)
-Base.metadata.create_all(engine)

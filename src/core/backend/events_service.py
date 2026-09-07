@@ -18,6 +18,10 @@ def get_event(db: Session, event_id: str) -> Optional[Event]:
 
 def create_event(db: Session, payload: EventCreate) -> Event:
     # Create a new event and, when applicable, persist a corresponding alert.
+    existing_event = db.get(Event, payload.id) if hasattr(payload, "id") else None
+    if existing_event is not None:
+        return existing_event
+
     event = Event(**payload.model_dump())
     db.add(event)
 
