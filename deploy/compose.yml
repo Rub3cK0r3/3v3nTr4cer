@@ -15,6 +15,11 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ../db/init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U devuser -d eventdb"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
 
   backend:
     build:
@@ -22,57 +27,17 @@ services:
       dockerfile: deploy/docker/Backend.Dockerfile
     container_name: backend
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     environment:
       # This URL will be repeated all over the deploys in all 
       # of the containers, we have to improve this and test it..
       DATABASE_URL: postgresql://devuser:devpass@db:5432/eventdb
       SECRET_KEY: dev-secret-key
       INTERNAL_TOKEN: dev-internal-token
+      OUTBOX_PUBLISHER_ENABLED: "true"
     ports:
       - "8000:8000"
-
-  collector:
-    build:
-      context: ..
-      dockerfile: deploy/docker/Collector.Dockerfile
-    container_name: collector
-    depends_on:
-      - db
-    environment:
-      DATABASE_URL: postgresql://devuser:devpass@db:5432/eventdb
-      BACKEND_BASE_URL: http://backend:8000
-      INTERNAL_TOKEN: dev-internal-token
-    ports:
-      - "8001:8001"
-
-  processor:
-    build:
-      context: ..
-      dockerfile: deploy/docker/Processor.Dockerfile
-    container_name: processor
-    depends_on:
-      - db
-    environment:
-      DATABASE_URL: postgresql://devuser:devpass@db:5432/eventdb
-      BACKEND_BASE_URL: http://backend:8000
-      INTERNAL_TOKEN: dev-internal-token
-    ports:
-      - "8002:8002"
-
-  alert_engine:
-    build:
-      context: ..
-      dockerfile: deploy/docker/AlertEngine.Dockerfile
-    container_name: alert_engine
-    depends_on:
-      - db
-    environment:
-      DATABASE_URL: postgresql://devuser:devpass@db:5432/eventdb
-      BACKEND_BASE_URL: http://backend:8000
-      INTERNAL_TOKEN: dev-internal-token
-    ports:
-      - "8003:8003"
 
 volumes:
   postgres_data:

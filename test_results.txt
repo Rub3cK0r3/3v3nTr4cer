@@ -1,0 +1,151 @@
+test_validate_alert (test_alert_manager.TestAlertManagerValidation.test_validate_alert) ... ok
+test_configurable_min_severity (test_alert_manager.TestAsyncAlertManagerThresholds.test_configurable_min_severity) ... /home/ruben/Desktop/github_repos/3v3nTr4cer/src/core/async_lib/alert_engine/main.py:76: RuntimeWarning: coroutine 'AsyncMockMixin._execute_mock_call' was never awaited
+  response.raise_for_status()
+RuntimeWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_default_threshold_sends_error_and_fatal (test_alert_manager.TestAsyncAlertManagerThresholds.test_default_threshold_sends_error_and_fatal) ... ok
+test_enqueue_and_worker_processes_items (test_async_manager.TestAsyncManager.test_enqueue_and_worker_processes_items) ... ok
+test_none_is_processed_and_queue_is_drained (test_async_manager.TestAsyncManager.test_none_is_processed_and_queue_is_drained) ... ok
+test_rejects_invalid_configuration (test_async_manager.TestAsyncManager.test_rejects_invalid_configuration) ... ok
+test_stop_drains_queue_even_if_handler_raises (test_async_manager.TestAsyncManager.test_stop_drains_queue_even_if_handler_raises) ... 2026-09-07 09:32:10.180 | ERROR    | core.async_lib.async_manager:_worker_loop:73 - AsyncManager worker error: handler failed
+Traceback (most recent call last):
+
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/usr/lib/python3.12/unittest/__main__.py", line 18, in <module>
+    main(module=None)
+    └ <class 'unittest.main.TestProgram'>
+  File "/usr/lib/python3.12/unittest/main.py", line 105, in __init__
+    self.runTests()
+    │    └ <function TestProgram.runTests at 0x73a03b99b920>
+    └ <unittest.main.TestProgram object at 0x73a03bb329c0>
+  File "/usr/lib/python3.12/unittest/main.py", line 281, in runTests
+    self.result = testRunner.run(self.test)
+    │             │          │   │    └ <unittest.suite.TestSuite tests=[None, <unittest.suite.TestSuite tests=[<unittest.suite.TestSuite tests=[None, None, None, <t...
+    │             │          │   └ <unittest.main.TestProgram object at 0x73a03bb329c0>
+    │             │          └ <function TextTestRunner.run at 0x73a03b99b1a0>
+    │             └ <unittest.runner.TextTestRunner object at 0x73a038f24aa0>
+    └ <unittest.main.TestProgram object at 0x73a03bb329c0>
+  File "/usr/lib/python3.12/unittest/runner.py", line 240, in run
+    test(result)
+    │    └ <unittest.runner.TextTestResult run=7 errors=0 failures=0>
+    └ <unittest.suite.TestSuite tests=[None, <unittest.suite.TestSuite tests=[<unittest.suite.TestSuite tests=[None, None, None, <t...
+  File "/usr/lib/python3.12/unittest/suite.py", line 84, in __call__
+    return self.run(*args, **kwds)
+           │    │    │       └ {}
+           │    │    └ (<unittest.runner.TextTestResult run=7 errors=0 failures=0>,)
+           │    └ <function TestSuite.run at 0x73a03b953b00>
+           └ <unittest.suite.TestSuite tests=[None, <unittest.suite.TestSuite tests=[<unittest.suite.TestSuite tests=[None, None, None, <t...
+  File "/usr/lib/python3.12/unittest/suite.py", line 122, in run
+    test(result)
+    │    └ <unittest.runner.TextTestResult run=7 errors=0 failures=0>
+    └ <unittest.suite.TestSuite tests=[<unittest.suite.TestSuite tests=[None, None, None, <test_async_manager.TestAsyncManager test...
+  File "/usr/lib/python3.12/unittest/suite.py", line 84, in __call__
+    return self.run(*args, **kwds)
+           │    │    │       └ {}
+           │    │    └ (<unittest.runner.TextTestResult run=7 errors=0 failures=0>,)
+           │    └ <function TestSuite.run at 0x73a03b953b00>
+           └ <unittest.suite.TestSuite tests=[<unittest.suite.TestSuite tests=[None, None, None, <test_async_manager.TestAsyncManager test...
+  File "/usr/lib/python3.12/unittest/suite.py", line 122, in run
+    test(result)
+    │    └ <unittest.runner.TextTestResult run=7 errors=0 failures=0>
+    └ <unittest.suite.TestSuite tests=[None, None, None, <test_async_manager.TestAsyncManager testMethod=test_stop_drains_queue_eve...
+  File "/usr/lib/python3.12/unittest/suite.py", line 84, in __call__
+    return self.run(*args, **kwds)
+           │    │    │       └ {}
+           │    │    └ (<unittest.runner.TextTestResult run=7 errors=0 failures=0>,)
+           │    └ <function TestSuite.run at 0x73a03b953b00>
+           └ <unittest.suite.TestSuite tests=[None, None, None, <test_async_manager.TestAsyncManager testMethod=test_stop_drains_queue_eve...
+  File "/usr/lib/python3.12/unittest/suite.py", line 122, in run
+    test(result)
+    │    └ <unittest.runner.TextTestResult run=7 errors=0 failures=0>
+    └ <test_async_manager.TestAsyncManager testMethod=test_stop_drains_queue_even_if_handler_raises>
+  File "/usr/lib/python3.12/unittest/case.py", line 690, in __call__
+    return self.run(*args, **kwds)
+           │    │    │       └ {}
+           │    │    └ (<unittest.runner.TextTestResult run=7 errors=0 failures=0>,)
+           │    └ <function IsolatedAsyncioTestCase.run at 0x73a039133ec0>
+           └ <test_async_manager.TestAsyncManager testMethod=test_stop_drains_queue_even_if_handler_raises>
+  File "/usr/lib/python3.12/unittest/async_case.py", line 131, in run
+    return super().run(result)
+                       └ <unittest.runner.TextTestResult run=7 errors=0 failures=0>
+  File "/usr/lib/python3.12/unittest/case.py", line 634, in run
+    self._callTestMethod(testMethod)
+    │    │               └ <bound method TestAsyncManager.test_stop_drains_queue_even_if_handler_raises of <test_async_manager.TestAsyncManager testMeth...
+    │    └ <function IsolatedAsyncioTestCase._callTestMethod at 0x73a039133a60>
+    └ <test_async_manager.TestAsyncManager testMethod=test_stop_drains_queue_even_if_handler_raises>
+  File "/usr/lib/python3.12/unittest/async_case.py", line 90, in _callTestMethod
+    if self._callMaybeAsync(method) is not None:
+       │    │               └ <bound method TestAsyncManager.test_stop_drains_queue_even_if_handler_raises of <test_async_manager.TestAsyncManager testMeth...
+       │    └ <function IsolatedAsyncioTestCase._callMaybeAsync at 0x73a039133ce0>
+       └ <test_async_manager.TestAsyncManager testMethod=test_stop_drains_queue_even_if_handler_raises>
+  File "/usr/lib/python3.12/unittest/async_case.py", line 112, in _callMaybeAsync
+    return self._asyncioRunner.run(
+           │    │              └ <function Runner.run at 0x73a03b1efba0>
+           │    └ <asyncio.runners.Runner object at 0x73a038cce150>
+           └ <test_async_manager.TestAsyncManager testMethod=test_stop_drains_queue_even_if_handler_raises>
+  File "/usr/lib/python3.12/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           │    │     │                  └ <Task pending name='Task-33' coro=<TestAsyncManager.test_stop_drains_queue_even_if_handler_raises() running at /home/ruben/De...
+           │    │     └ <function BaseEventLoop.run_until_complete at 0x73a03b1ed800>
+           │    └ <_UnixSelectorEventLoop running=True closed=False debug=True>
+           └ <asyncio.runners.Runner object at 0x73a038cce150>
+  File "/usr/lib/python3.12/asyncio/base_events.py", line 674, in run_until_complete
+    self.run_forever()
+    │    └ <function BaseEventLoop.run_forever at 0x73a03b1ed760>
+    └ <_UnixSelectorEventLoop running=True closed=False debug=True>
+  File "/usr/lib/python3.12/asyncio/base_events.py", line 641, in run_forever
+    self._run_once()
+    │    └ <function BaseEventLoop._run_once at 0x73a03b1ef560>
+    └ <_UnixSelectorEventLoop running=True closed=False debug=True>
+  File "/usr/lib/python3.12/asyncio/base_events.py", line 1979, in _run_once
+    handle._run()
+    │      └ <function Handle._run at 0x73a03b125a80>
+    └ <Handle <_asyncio.TaskStepMethWrapper object at 0x73a03915c580>() created at /usr/lib/python3.12/asyncio/base_events.py:458>
+  File "/usr/lib/python3.12/asyncio/events.py", line 88, in _run
+    self._context.run(self._callback, *self._args)
+    │    │            │    │           │    └ <member '_args' of 'Handle' objects>
+    │    │            │    │           └ <Handle <_asyncio.TaskStepMethWrapper object at 0x73a03915c580>() created at /usr/lib/python3.12/asyncio/base_events.py:458>
+    │    │            │    └ <member '_callback' of 'Handle' objects>
+    │    │            └ <Handle <_asyncio.TaskStepMethWrapper object at 0x73a03915c580>() created at /usr/lib/python3.12/asyncio/base_events.py:458>
+    │    └ <member '_context' of 'Handle' objects>
+    └ <Handle <_asyncio.TaskStepMethWrapper object at 0x73a03915c580>() created at /usr/lib/python3.12/asyncio/base_events.py:458>
+
+> File "/home/ruben/Desktop/github_repos/3v3nTr4cer/src/core/async_lib/async_manager.py", line 66, in _worker_loop
+    await handler(item)
+          │       └ 'bad'
+          └ <function TestAsyncManager.test_stop_drains_queue_even_if_handler_raises.<locals>.handler at 0x73a038cbb600>
+
+  File "/home/ruben/Desktop/github_repos/3v3nTr4cer/src/tests/test_async_manager.py", line 26, in handler
+    raise RuntimeError("handler failed")
+
+RuntimeError: handler failed
+ok
+test_required_event_fields_constant (test_collector.TestCollectorValidation.test_required_event_fields_constant) ... ok
+test_validate_event_failure_missing_fields (test_collector.TestCollectorValidation.test_validate_event_failure_missing_fields) ... ok
+test_validate_event_success (test_collector.TestCollectorValidation.test_validate_event_success) ... ok
+test_insert_event_api_posts_event_payload (test_collector_async.TestAsyncCollector.test_insert_event_api_posts_event_payload) ... ok
+test_notify_callback_rejects_invalid_event (test_collector_async.TestAsyncCollector.test_notify_callback_rejects_invalid_event) ... 2026-09-07 09:32:10.234 | WARNING  | core.async_lib.collector.main:_notify_callback:68 - Invalid event skipped
+ok
+test_notify_callback_rejects_invalid_json_payload (test_collector_async.TestAsyncCollector.test_notify_callback_rejects_invalid_json_payload) ... 2026-09-07 09:32:10.235 | WARNING  | core.async_lib.collector.main:_notify_callback:76 - Invalid JSON payload: not-json
+ok
+test_notify_fastapi_sends_to_all_connections (test_collector_async.TestAsyncCollector.test_notify_fastapi_sends_to_all_connections) ... ok
+test_events_and_alerts_flow_through_pipeline (test_integration.TestAsyncPipelineIntegration.test_events_and_alerts_flow_through_pipeline)
+Test that events and alerts flow through the pipeline correctly. ... ok
+test_create_event_adds_event_and_outbox_together (test_outbox.TestEventOutboxTransaction.test_create_event_adds_event_and_outbox_together) ... ok
+test_publish_marks_message_failed (test_outbox.TestOutboxPublisher.test_publish_marks_message_failed) ... 2026-09-07 09:32:10.367 | ERROR    | core.async_lib.outbox.publisher:publish_batch:74 - Outbox publication failed: consumer unavailable
+ok
+test_publish_marks_message_published (test_outbox.TestOutboxPublisher.test_publish_marks_message_published) ... ok
+test_validate_event (test_processor.TestProcessor.test_validate_event) ... ok
+test_handle_posts_event_when_valid (test_processor_async.TestEventProcessor.test_handle_posts_event_when_valid) ... ok
+test_handle_routes_event_to_dead_letter_after_retries (test_processor_async.TestEventProcessor.test_handle_routes_event_to_dead_letter_after_retries) ... 2026-09-07 09:32:10.373 | WARNING  | core.async_lib.processor.main:_process_with_retries:103 - Recoverable event failure; retrying in 0.5 seconds: boom
+2026-09-07 09:32:10.875 | WARNING  | core.async_lib.processor.main:_process_with_retries:103 - Recoverable event failure; retrying in 1.0 seconds: boom
+2026-09-07 09:32:11.876 | ERROR    | core.async_lib.processor.main:_process_with_retries:96 - Retry budget exhausted; moving event to dead-letter queue: boom
+ok
+test_handle_skips_invalid_event (test_processor_async.TestEventProcessor.test_handle_skips_invalid_event) ... 2026-09-07 09:32:11.878 | WARNING  | core.async_lib.processor.main:handle:65 - Invalid event skipped
+ok
+
+----------------------------------------------------------------------
+Ran 22 tests in 1.759s
+
+OK

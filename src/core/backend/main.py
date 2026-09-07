@@ -1,20 +1,25 @@
 import os
+import asyncio
 from fastapi import FastAPI, Depends, Header, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 from uuid import uuid4
-from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from loguru import logger
 from contracts.base_model import Base
-from contracts.events import Event,User,EventCreate,EventResponse,DeadLetterEvent
+from contracts.events import Event, User, EventCreate, EventResponse, DeadLetterEvent
 from contracts.alerts import Alert
+from contracts.internal import DeadLetterEventIn, HealthResponse, PipelineAlertIn, PipelineEventIn
 from core.backend.database import engine
+from core.backend.alert_service import create_alert
+from core.backend.dlq_service import create_dead_letter
+from core.async_lib.outbox.publisher import OutboxPublisher
+from core.async_lib.processor.main import EventProcessor
 # services defined in events_service.py
 from core.backend.events_service import (
     list_events as list_events_service,
@@ -30,9 +35,28 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 # Initialize FastAPI
 app = FastAPI()
+outbox_publisher: OutboxPublisher | None = None
+outbox_task: asyncio.Task | None = None
 
 
-@app.get("/health")
+@app.on_event("startup")
+async def start_outbox_publisher() -> None:
+    global outbox_publisher, outbox_task
+    if os.getenv("OUTBOX_PUBLISHER_ENABLED", "true").lower() != "true":
+        return
+    outbox_publisher = OutboxPublisher(EventProcessor().handle)
+    outbox_task = asyncio.create_task(outbox_publisher.run_forever())
+
+
+@app.on_event("shutdown")
+async def stop_outbox_publisher() -> None:
+    if outbox_publisher is None or outbox_task is None:
+        return
+    outbox_publisher.stop()
+    await outbox_task
+
+
+@app.get("/health", response_model=HealthResponse)
 def health() -> dict[str, str]:
     """Return process health without contacting PostgreSQL."""
     return {"status": "ok"}
@@ -143,48 +167,6 @@ def create_event(payload: EventCreate, db: Session = Depends(get_db), current_us
     event = create_event_service(db, payload)
     return event
 
-# Internal pipeline contracts (no auth, used by async workers)
-# This is part of the initial implementation and they are 
-# structure decision I made throughout the time I started in this project
-# and it's for the sake of data integrity , safety and so on and so forth 
-
-class PipelineEventIn(BaseModel):
-    id: Optional[str] = None
-    app_name: Optional[str] = None
-    type: str
-    payload: Dict[str, Any]
-    severity: Optional[str] = None
-    timestamp: Optional[int] = None
-    resource: Optional[str] = None
-    referrer: Optional[str] = None
-
-
-class DeadLetterEventIn(BaseModel):
-    """
-    DTO used by the processor to persist an event in the DLQ.
-
-    The original payload is preserved intact, and diagnostic metadata such as
-    retries and last_error is attached for later inspection.
-    """
-    id: Optional[str] = None
-    app_name: Optional[str] = None
-    type: str
-    payload: Dict[str, Any]
-    severity: Optional[str] = None
-    timestamp: Optional[int] = None
-    resource: Optional[str] = None
-    referrer: Optional[str] = None
-    retries: int = 0
-    last_error: Optional[str] = None
-
-
-class PipelineAlertIn(BaseModel):
-    id: Optional[str] = None
-    severity: str
-    resource: Optional[str] = None
-    payload: Dict[str, Any] = {}
-
-
 @app.post("/internal/pipeline/events", dependencies=[Depends(require_internal_token)])
 def ingest_pipeline_event(payload: PipelineEventIn, db: Session = Depends(get_db)):
     # Internal endpoint used by async pipeline components to persist events.
@@ -269,11 +251,7 @@ def ingest_dead_letter_event(payload: DeadLetterEventIn, db: Session = Depends(g
     if existing_item is not None:
         return existing_item
 
-    db.add(dead_letter_item)
-    db.commit()
-    db.refresh(dead_letter_item)
-
-    return dead_letter_item
+    return create_dead_letter(db, dead_letter_item)
 
 
 @app.post("/internal/pipeline/alerts", dependencies=[Depends(require_internal_token)])
@@ -292,8 +270,4 @@ def ingest_pipeline_alert(payload: PipelineAlertIn, db: Session = Depends(get_db
         created_at=now_ms,
     )
 
-    db.add(alert)
-    db.commit()
-    db.refresh(alert)
-
-    return alert
+    return create_alert(db, alert)

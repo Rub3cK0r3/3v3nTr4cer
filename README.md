@@ -22,7 +22,7 @@ The backend is the primary ingestion boundary in the current implementation. The
 - [Configuration](#-configuration)
 - [Contributing](#-contributing)
 - [Security](#-security)
-- [AI Usage](#-ai-usage)
+- [AI Usage](#ai-usage)
 - [License](#-license)
 
 ## ✨ Features
@@ -34,7 +34,7 @@ The backend is the primary ingestion boundary in the current implementation. The
 - **Configurable alerting** – Severity thresholds for warning, error and fatal events
 - **Retry and dead-letter handling** – Failed processor deliveries are retained for inspection
 - **JWT authentication** – Protected public event query and creation endpoints
-- **Docker Compose deployment** – Reproducible local multi-service environment
+- **Docker Compose deployment** – Reproducible local backend and PostgreSQL environment
 
 
 ![Arquitectura del sistema](assets/3v3nTracer-diagram.png)
@@ -62,7 +62,34 @@ FastAPI backend
 PostgreSQL
 ```
 
-The asynchronous components are prepared for later integration through a durable queue when scale, replayability or horizontal deployment becomes a requirement.
+The backend writes an `event_outbox` record in the same transaction as each public event. The in-process Outbox publisher claims pending records and delegates delivery to the existing processor with at-least-once semantics. RabbitMQ and Kafka remain future scaling options, not current dependencies.
+
+## Architecture and Reliability
+
+```text
+Client
+  |
+  v
+FastAPI + JWT
+  |
+  +--> events
+  +--> event_outbox --FOR UPDATE SKIP LOCKED--> EventProcessor
+                                      |
+                                      +--> retry with capped backoff
+                                      +--> dead_letter_events
+```
+
+The public ingestion transaction writes the event, any severity-based alert, and
+its Outbox message together. The publisher moves messages through `pending`,
+`processing`, `published`, or `failed`, recovers stale processing claims, and
+uses `event_id` idempotency at the consumer boundary. The in-memory worker queue
+is intentionally process-local; PostgreSQL Outbox is the durable handoff.
+
+Known limitations: the current demo runs the publisher inside the backend process,
+uses a shared internal token for service authentication, and uses the development
+SQL bootstrap alongside an Alembic migration. A production deployment should use
+secret management, independent publisher scaling, observability, and a migration
+pipeline as its source of truth.
 
 ## 📋 Requirements
 
@@ -137,8 +164,18 @@ export DB_HOST=localhost
 export DATABASE_URL="postgresql://devuser:devpass@localhost:5432/eventdb"
 export SECRET_KEY="your-secret-key"
 export INTERNAL_TOKEN="your-internal-token"
+export OUTBOX_PUBLISHER_ENABLED="true"
 export ALERT_MIN_SEVERITY="error"
 ```
+
+### 3.6 One-command demo
+
+```bash
+./demo.sh
+```
+
+This starts the Compose stack, waits for `/health`, prints `/ready`, and writes
+the complete unit-test result to `test_results.txt`.
 
 ## 4. Usage with examples and commands
 
@@ -307,6 +344,13 @@ PYTHONPATH=src python -m unittest discover -s src/tests -v
 - `src/tests/test_async_manager.py` – async queue management
 - `src/tests/test_collector_async.py` – async collector API/WebSocket handling
 - `src/tests/test_processor_async.py` – async processor handling
+- `src/tests/test_outbox.py` – atomic Outbox writes and publisher states
+
+### 6.3 Database migrations
+
+```bash
+PYTHONPATH=src alembic upgrade head
+```
 
 ## 7. License
 
