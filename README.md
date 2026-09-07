@@ -5,11 +5,11 @@
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 ![Status](https://img.shields.io/badge/status-in%20development-orange)
 
-> Modular event-observability SaaS foundation for backend event ingestion, processing, persistence and alerting.
+> Python backend MVP for application event ingestion, persistence, asynchronous processing and alerting.
 
-`3v3nTr4cer` is a **backend-first, modular SaaS foundation** for handling application event pipelines in Python. Its capabilities are intentionally separated into independently structured modules so they can be deployed together as one platform or evolved into standalone products: event ingestion, asynchronous processing, durable storage, alerting and failure handling.
+`3v3nTr4cer` is a **backend-first Python project** for handling application events through a FastAPI API and PostgreSQL persistence. It includes independently structured components for event collection, asynchronous worker processing, retry handling, alert evaluation and dead-letter storage.
 
-The current version is an MVP. The backend is the primary ingestion boundary and persists events in PostgreSQL. The collector, processor and alert engine provide separate processing capabilities, while the current in-memory queue and PostgreSQL-backed dead-letter table leave a clear path toward a durable broker such as RabbitMQ or Kafka.
+The backend is the primary ingestion boundary in the current implementation. The asynchronous components use an in-memory `asyncio.Queue`, and failed events are stored in a PostgreSQL-backed dead-letter table. Docker Compose provides a reproducible development deployment, while a durable broker such as RabbitMQ or Kafka remains a future scaling option.
 
 ## 📋 Table of Contents
 
@@ -22,6 +22,7 @@ The current version is an MVP. The backend is the primary ingestion boundary and
 - [Configuration](#-configuration)
 - [Contributing](#-contributing)
 - [Security](#-security)
+- [AI Usage](#ai-usage)
 - [License](#-license)
 
 ## ✨ Features
@@ -33,7 +34,7 @@ The current version is an MVP. The backend is the primary ingestion boundary and
 - **Configurable alerting** – Severity thresholds for warning, error and fatal events
 - **Retry and dead-letter handling** – Failed processor deliveries are retained for inspection
 - **JWT authentication** – Protected public event query and creation endpoints
-- **Docker Compose deployment** – Reproducible local multi-service environment
+- **Docker Compose deployment** – Reproducible local backend and PostgreSQL environment
 
 
 ![Arquitectura del sistema](assets/3v3nTracer-diagram.png)
@@ -61,7 +62,34 @@ FastAPI backend
 PostgreSQL
 ```
 
-The asynchronous components are prepared for later integration through a durable queue when scale, replayability or horizontal deployment becomes a requirement.
+The backend writes an `event_outbox` record in the same transaction as each public event. The in-process Outbox publisher claims pending records and delegates delivery to the existing processor with at-least-once semantics. RabbitMQ and Kafka remain future scaling options, not current dependencies.
+
+## Architecture and Reliability
+
+```text
+Client
+  |
+  v
+FastAPI + JWT
+  |
+  +--> events
+  +--> event_outbox --FOR UPDATE SKIP LOCKED--> EventProcessor
+                                      |
+                                      +--> retry with capped backoff
+                                      +--> dead_letter_events
+```
+
+The public ingestion transaction writes the event, any severity-based alert, and
+its Outbox message together. The publisher moves messages through `pending`,
+`processing`, `published`, or `failed`, recovers stale processing claims, and
+uses `event_id` idempotency at the consumer boundary. The in-memory worker queue
+is intentionally process-local; PostgreSQL Outbox is the durable handoff.
+
+Known limitations: the current demo runs the publisher inside the backend process,
+uses a shared internal token for service authentication, and uses the development
+SQL bootstrap alongside an Alembic migration. A production deployment should use
+secret management, independent publisher scaling, observability, and a migration
+pipeline as its source of truth.
 
 ## 📋 Requirements
 
@@ -100,8 +128,7 @@ pip install -r deploy/requirements.txt
 ### 3.3 Option B: Docker (recommended)
 
 ```bash
-cd deploy
-docker compose up -d
+docker compose -f deploy/compose.yml up -d --build
 ```
 
 Check service status:
@@ -136,8 +163,19 @@ export POSTGRES_DB=eventdb
 export DB_HOST=localhost
 export DATABASE_URL="postgresql://devuser:devpass@localhost:5432/eventdb"
 export SECRET_KEY="your-secret-key"
+export INTERNAL_TOKEN="your-internal-token"
+export OUTBOX_PUBLISHER_ENABLED="true"
 export ALERT_MIN_SEVERITY="error"
 ```
+
+### 3.6 One-command demo
+
+```bash
+./demo.sh
+```
+
+This starts the Compose stack, waits for `/health`, prints `/ready`, and writes
+the complete unit-test result to `test_results.txt`.
 
 ## 4. Usage with examples and commands
 
@@ -171,6 +209,13 @@ Response:
 }
 ```
 
+Check the process and database readiness independently:
+
+```bash
+curl http://localhost:8000/health
+curl http://localhost:8000/ready
+```
+
 ### 4.3 API endpoints (requires Bearer token)
 
 - `GET /v1/events` – list events
@@ -197,6 +242,7 @@ curl -X POST "http://localhost:8000/v1/events" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
+    "id": "evt-demo-001",
     "severity": "info",
     "timestamp": 1700000000000,
     "app_name": "my-app",
@@ -206,8 +252,12 @@ curl -X POST "http://localhost:8000/v1/events" \
 
 ### 4.4 Internal pipeline example
 
+Internal pipeline routes require the `X-Internal-Token` header. The Compose demo
+uses `dev-internal-token`; replace it when deploying outside the local demo.
+
 ```bash
 curl -X POST "http://localhost:8000/internal/pipeline/events" \
+  -H "X-Internal-Token: dev-internal-token" \
   -H "Content-Type: application/json" \
   -d '{
     "type": "event",
@@ -217,6 +267,7 @@ curl -X POST "http://localhost:8000/internal/pipeline/events" \
 
 ```bash
 curl -X POST "http://localhost:8000/internal/pipeline/alerts" \
+  -H "X-Internal-Token: dev-internal-token" \
   -H "Content-Type: application/json" \
   -d '{
     "severity": "error",
@@ -293,10 +344,32 @@ PYTHONPATH=src python -m unittest discover -s src/tests -v
 - `src/tests/test_async_manager.py` – async queue management
 - `src/tests/test_collector_async.py` – async collector API/WebSocket handling
 - `src/tests/test_processor_async.py` – async processor handling
+- `src/tests/test_outbox.py` – atomic Outbox writes and publisher states
+
+### 6.3 Database migrations
+
+```bash
+PYTHONPATH=src alembic upgrade head
+```
 
 ## 7. License
 
 MIT License. See [LICENSE](LICENSE).
+
+## AI Usage
+
+GitHub Copilot was used during this MVP pass for targeted refactoring, test-oriented
+debugging, structured logging changes, retry/DLQ implementation support, and README
+updates. The human project owner made the architecture decisions, including keeping
+FastAPI as the event boundary, retaining `AsyncManager` as infrastructure, and
+choosing PostgreSQL-backed durability instead of introducing RabbitMQ or Kafka.
+
+All generated changes were reviewed in the repository, checked for type/syntax errors,
+and validated with the full unittest suite before being kept. Copilot-assisted changes
+are traceable through the working-tree diff and the corresponding phase-oriented
+change history; no code was accepted solely because it was generated. The reason for
+using AI was to accelerate repetitive implementation and documentation work while
+leaving system design, security decisions, and final verification under human review.
 
 ## 8. Project structure
 

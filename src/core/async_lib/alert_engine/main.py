@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import httpx
 from typing import TYPE_CHECKING
+from loguru import logger
 # Sanity checks in this frontier too...
 from contracts.alerts import REQUIRED_ALERT_FIELDS,SEVERITY_LEVELS
 
@@ -26,13 +27,14 @@ class AlertManager:
         #     backend_base_url (str | None): Base URL of the backend API.
         self.db_pool = db_pool
         self.backend_base_url = backend_base_url or os.getenv("BACKEND_BASE_URL", "http://backend:8000")
+        self.internal_token = os.getenv("INTERNAL_TOKEN", "")
 
     async def handle(self, alert: dict):
         # Main processing entry point used by AsyncManager workers.
         # Args:
         #     alert (dict): Incoming alert dictionary.
         if not self._validate_alert(alert):
-            print("Invalid alert, skipping:", alert)
+            logger.bind(event_id=alert.get("id"), pipeline_stage="validation").warning("Invalid alert skipped")
             return
 
         await self._process_alert(alert)
@@ -66,13 +68,17 @@ class AlertManager:
                     "resource": alert.get("resource"),
                     "payload": alert,
                 }
-                response = await client.post("/internal/pipeline/alerts", json=payload)
+                response = await client.post(
+                    "/internal/pipeline/alerts",
+                    json=payload,
+                    headers={"X-Internal-Token": self.internal_token},
+                )
                 response.raise_for_status()
 
-            print(f"ALERT via API: {alert['id']} - {alert['severity']} on {alert.get('resource')}")
-
         except Exception as e:
-            print(f"API write failed for alert {alert.get('id')}: {e}")
+            logger.bind(event_id=alert.get("id"), app_name=alert.get("app_name"), pipeline_stage="alert").error(
+                "API write failed: {}", e
+            )
 
     def _validate_alert(self, alert: dict) -> bool:
         # Validates that an alert contains all required fields.

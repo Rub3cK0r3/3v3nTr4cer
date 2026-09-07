@@ -130,6 +130,47 @@ CREATE TABLE IF NOT EXISTS alerts (
     created_at BIGINT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS dead_letter_events (
+    id VARCHAR(64) PRIMARY KEY,
+    original_event_id VARCHAR(64) NOT NULL,
+    app_name VARCHAR(255) NOT NULL,
+    event_type VARCHAR(100) NOT NULL,
+    severity VARCHAR(10) NOT NULL,
+    payload JSON NOT NULL,
+    retries INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT,
+    timestamp BIGINT,
+    resource TEXT,
+    referrer TEXT,
+    dead_lettered_at BIGINT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_dead_letter_app_name ON dead_letter_events(app_name);
+CREATE INDEX IF NOT EXISTS idx_dead_letter_severity ON dead_letter_events(severity);
+CREATE INDEX IF NOT EXISTS idx_dead_letter_dead_lettered_at ON dead_letter_events(dead_lettered_at);
+
+CREATE TABLE IF NOT EXISTS users (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(255) UNIQUE NOT NULL,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    hashed_password VARCHAR(255) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS event_outbox (
+    id VARCHAR(64) PRIMARY KEY,
+    event_id VARCHAR(64) NOT NULL UNIQUE,
+    event_type VARCHAR(100) NOT NULL,
+    payload JSON NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'pending',
+    attempts INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT,
+    created_at BIGINT NOT NULL,
+    published_at BIGINT
+);
+
+CREATE INDEX IF NOT EXISTS idx_event_outbox_status_created_at ON event_outbox(status, created_at);
+CREATE INDEX IF NOT EXISTS idx_event_outbox_created_at ON event_outbox(created_at);
+
 
 -- i watch the data after i insert it..
 SELECT * FROM events; 

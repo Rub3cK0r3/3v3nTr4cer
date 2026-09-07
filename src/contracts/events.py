@@ -10,7 +10,9 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.dialects.postgresql import JSONB
 from typing import Dict, Optional
+from uuid import uuid4
 from pydantic import BaseModel
+from pydantic import Field
 from .base_model import Base
 
 # In order to be able to do Sanity checks, this list contains the required fields for an event to be valid. If any of these fields is missing, the event will be rejected.
@@ -115,7 +117,28 @@ Index("idx_dead_letter_severity", DeadLetterEvent.severity)
 Index("idx_dead_letter_dead_lettered_at", DeadLetterEvent.dead_lettered_at)
 
 
+class EventOutbox(Base):
+    """Durable event publication record used for at-least-once delivery."""
+
+    __tablename__ = "event_outbox"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    event_id: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    event_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    payload: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_error: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    published_at: Mapped[int | None] = mapped_column(BigInteger)
+
+
+Index("idx_event_outbox_status_created_at", EventOutbox.status, EventOutbox.created_at)
+Index("idx_event_outbox_created_at", EventOutbox.created_at)
+
+
 class EventCreate(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid4()))
     severity: str
     stack: Optional[str] = None
     type: Optional[str] = None

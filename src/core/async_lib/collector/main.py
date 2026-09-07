@@ -6,6 +6,7 @@ import os
 import signal
 import httpx
 import asyncpg
+from loguru import logger
 from contracts.events import REQUIRED_EVENT_FIELDS
 
 # import AsyncManager so we need it as Base Class in our Implementation
@@ -31,6 +32,7 @@ class AsyncCollector:
 
         # Backend API base URL (persist events by service)
         self.backend_base_url = backend_base_url or os.getenv("BACKEND_BASE_URL", "http://backend:8000")
+        self.internal_token = os.getenv("INTERNAL_TOKEN", "")
 
     async def start(self):
         # Initialize events DB pool, workers and listener
@@ -54,7 +56,7 @@ class AsyncCollector:
                         await asyncio.sleep(1)  # keep alive
 
             except Exception as e:
-                print(f"LISTENER ERROR:{e}")
+                logger.bind(pipeline_stage="collector").error("Listener error: {}", e)
                 await asyncio.sleep(2)
 
     def _notify_callback(self, connection, pid, channel, payload):
@@ -63,13 +65,15 @@ class AsyncCollector:
             event = json.loads(payload)
 
             if not self._validate_event(event):
-                print(f"INVALID EVENT, skipping:{event}")
+                logger.bind(event_id=event.get("id"), app_name=event.get("app_name"), pipeline_stage="validation").warning(
+                    "Invalid event skipped"
+                )
                 return
 
             asyncio.create_task(self.async_manager.enqueue(event))
 
         except json.JSONDecodeError:
-            print(f"INVALID JSON payload:{payload}")
+            logger.bind(pipeline_stage="collector").warning("Invalid JSON payload: {}", payload)
 
     async def _process_event(self, event):
         # "Processes" an event: persists by API and notifies FastAPI WebSocket
@@ -84,11 +88,17 @@ class AsyncCollector:
                     "type": event["type"],
                     "payload": event,
                 }
-                response = await client.post("/internal/pipeline/events", json=payload)
+                response = await client.post(
+                    "/internal/pipeline/events",
+                    json=payload,
+                    headers={"X-Internal-Token": self.internal_token},
+                )
                 response.raise_for_status()
 
         except Exception as e:
-            print(f"API write failed for event:..", event, "Error:", e)
+            logger.bind(event_id=event.get("id"), app_name=event.get("app_name"), pipeline_stage="collector").error(
+                "API write failed: {}", e
+            )
 
     async def _notify_fastapi(self, event):
         #Sends event everybody with WebSockets connected in FastAPI
@@ -100,7 +110,9 @@ class AsyncCollector:
             try:
                 await ws.send_json(event)
             except Exception as e:
-                print(f"Error enviando evento a websocket:{e}")
+                logger.bind(event_id=event.get("id"), app_name=event.get("app_name"), pipeline_stage="collector").error(
+                    "WebSocket notification failed: {}", e
+                )
 
     # Minimal sanity validation done before the data to the backend...
     def _validate_event(self, event):
@@ -121,7 +133,7 @@ class AsyncCollector:
 
         # Close DB pool 
         await self.db_pool.close()
-        print("Collector stopped gracefully.")
+        logger.bind(pipeline_stage="collector").info("Collector stopped gracefully")
 
 
 async def main():

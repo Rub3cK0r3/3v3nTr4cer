@@ -3,6 +3,7 @@ import uuid
 import random
 import os
 import sys
+from loguru import logger
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -57,7 +58,7 @@ def generate_alert(i):
     }
 
 if __name__ == "__main__":
-    print("Starting Load Simulation")
+    logger.info("Starting load simulation")
 
     collector = Collector(max_queue_size=NUM_EVENTS)
     processor = Processor(worker_count=WORKER_COUNT)
@@ -67,23 +68,23 @@ if __name__ == "__main__":
     processor.start()
     alert_manager.start()
 
-    print(f"Generating {NUM_EVENTS} mock events...")
+    logger.info("Generating {} mock events", NUM_EVENTS)
     for i in range(NUM_EVENTS):
         event = generate_event(i)
         try:
             collector.event_queue.put_nowait(event)
         except Exception:
-            print("Collector queue full, dropping event")
+            logger.warning("Collector queue full, dropping event")
 
-    print(f"Generating {NUM_ALERTS} mock alerts...")
+    logger.info("Generating {} mock alerts", NUM_ALERTS)
     for i in range(NUM_ALERTS):
         alert = generate_alert(i)
         try:
             alert_manager.event_queue.put_nowait(alert)
         except Exception:
-            print("Alert queue full, dropping alert")
+            logger.warning("Alert queue full, dropping alert")
 
-    print("Waiting for queues to drain...")
+    logger.info("Waiting for queues to drain")
     collector.event_queue.join()
     alert_manager.event_queue.join()
 
@@ -91,5 +92,5 @@ if __name__ == "__main__":
     alert_manager.stop()
     collector.stop()
 
-    print("Load Simulation completed successfully!")
+    logger.info("Load simulation completed successfully")
 
