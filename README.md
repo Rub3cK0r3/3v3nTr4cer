@@ -352,6 +352,9 @@ PYTHONPATH=src python -m unittest discover -s src/tests -v
 PYTHONPATH=src alembic upgrade head
 ```
 
+### 6.3 Started CPU-efficient implementation in C++
+Initialized systems implementation architecture setup with python/c++ bridge.
+
 ## 7. License
 
 MIT License. See [LICENSE](LICENSE).
