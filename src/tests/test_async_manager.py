@@ -46,6 +46,33 @@ class TestAsyncManager(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(processed, [None])
         self.assertTrue(manager.queue.empty())
 
+    async def test_enqueue_waits_when_native_queue_is_full(self):
+        manager = AsyncManager(worker_count=1, max_queue_size=1)
+        handler_started = asyncio.Event()
+        release_handler = asyncio.Event()
+        processed = []
+
+        async def handler(item):
+            processed.append(item)
+            if item == "first":
+                handler_started.set()
+                await release_handler.wait()
+
+        await manager.start(handler)
+        await manager.enqueue("first")
+        await handler_started.wait()
+        await manager.enqueue("second")
+        blocked_enqueue = asyncio.create_task(manager.enqueue("third"))
+        await asyncio.sleep(0)
+
+        self.assertFalse(blocked_enqueue.done())
+
+        release_handler.set()
+        await blocked_enqueue
+        await manager.stop()
+
+        self.assertEqual(processed, ["first", "second", "third"])
+
     def test_rejects_invalid_configuration(self):
         with self.assertRaises(ValueError):
             AsyncManager(worker_count=0)
