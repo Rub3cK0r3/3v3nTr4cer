@@ -1,145 +1,124 @@
-#include <iostream>
-#include <vector>
-#include <queue>
-#include <thread>
-#include <mutex>
+#include <pybind11/pybind11.h>
+
 #include <condition_variable>
-#include <string>
-#include <functional>
-#include <chrono>
+#include <cstddef>
+#include <mutex>
+#include <queue>
+#include <stdexcept>
+#include <thread>
+#include <utility>
+#include <vector>
 
-// Mapeo exacto de tu tabla SQL 'events'
-struct SqlEvent {
-    std::string id;
-    std::string severity;
-    std::string stack;
-    std::string type;
-    int64_t timestamp;
-    int64_t received_at;
-    std::string resource;
-    std::string referrer;
-    std::string app_name;
-    std::string app_version;
-    std::string app_stage;
-    std::string tags_json; // Almacenado temporalmente como string JSON
-    std::string endpoint_id;
-    std::string endpoint_language;
-    std::string endpoint_platform;
-    std::string endpoint_os;
-    std::string endpoint_os_version;
-    std::string endpoint_runtime;
-    std::string endpoint_runtime_version;
-    std::string endpoint_country;
-    std::string endpoint_user_agent;
-    std::string endpoint_device_type;
-};
+namespace py = pybind11;
 
-// Worker Pool especializado en persistencia SQL
-class SqlEventWorkerPool {
+class NativeAsyncManager {
 public:
-    SqlEventWorkerPool(size_t workerCount, size_t batchSize) 
-        : stop(false), maxBatchSize(batchSize) 
-    {
-        for (size_t i = 0; i < workerCount; ++i) {
-            workers.emplace_back([this, i] {
-                // Cada hilo mantiene su propio buffer local para evitar colisiones entre núcleos
-                std::vector<SqlEvent> localBatch;
-                localBatch.reserve(maxBatchSize);
+    NativeAsyncManager(size_t worker_count, size_t max_queue_size, py::function dispatch)
+        : max_queue_size_(max_queue_size), dispatch_(std::move(dispatch)) {
+        if (worker_count == 0) {
+            throw std::invalid_argument("worker_count must be positive");
+        }
+        if (max_queue_size_ == 0) {
+            throw std::invalid_argument("max_queue_size must be positive");
+        }
 
-                while (true) {
-                    {
-                        std::unique_lock<std::mutex> lock(this->queueMutex);
-                        // Espera si no hay eventos y no se ha ordenado parar, 
-                        // O si hay eventos pero no son suficientes para un lote completo (y no estamos cerrando)
-                        this->condition.wait(lock, [this, &localBatch] {
-                            return this->stop || 
-                                   !this->eventQueue.empty() || 
-                                   (this->stop && !localBatch.empty());
-                        });
-
-                        // Transferir eventos de la cola global a la cola local del hilo
-                        while (!this->eventQueue.empty() && localBatch.size() < maxBatchSize) {
-                            localBatch.push_back(std::move(this->eventQueue.front()));
-                            this->eventQueue.pop();
-                        }
-
-                        if (this->stop && localBatch.empty() && this->eventQueue.empty()) {
-                            return; // Terminación segura del hilo
-                        }
-                    }
-
-                    // Si el lote está listo o el sistema se está deteniendo, persistir en la DB
-                    if (!localBatch.empty()) {
-                        executeBatchInsert(localBatch, i);
-                        localBatch.clear();
-                    }
+        workers_.reserve(worker_count);
+        try {
+            for (size_t index = 0; index < worker_count; ++index) {
+                workers_.emplace_back([this] { worker_loop(); });
+            }
+        } catch (...) {
+            {
+                std::lock_guard<std::mutex> lock(mutex_);
+                stopping_ = true;
+            }
+            available_.notify_all();
+            for (auto& worker : workers_) {
+                if (worker.joinable()) {
+                    worker.join();
                 }
-            });
+            }
+            throw;
         }
     }
 
-    // API pública para que la capa de red/API envíe eventos de forma no bloqueante
-    void pushEvent(SqlEvent event) {
-        {
-            std::lock_guard<std::mutex> lock(queueMutex);
-            if (stop) return;
-            eventQueue.push(std::move(event));
-        }
-        condition.notify_one(); // Despierta a un worker disponible
+    ~NativeAsyncManager() {
+        shutdown();
     }
 
-    ~SqlEventWorkerPool() {
-        {
-            std::lock_guard<std::mutex> lock(queueMutex);
-            stop = true;
+    void enqueue(py::object item) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (stopping_) {
+            throw std::runtime_error("AsyncManager is stopped");
         }
-        condition.notify_all();
-        for (std::thread &worker : workers) {
-            if (worker.joinable()) worker.join();
+        if (queue_.size() >= max_queue_size_) {
+            throw std::runtime_error("AsyncManager queue capacity invariant violated");
+        }
+
+        queue_.push(std::move(item));
+        available_.notify_one();
+    }
+
+    bool empty() const {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return queue_.empty();
+    }
+
+    void shutdown() {
+        std::lock_guard<std::mutex> shutdown_lock(shutdown_mutex_);
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            stopping_ = true;
+        }
+        available_.notify_all();
+
+        py::gil_scoped_release release;
+        for (auto& worker : workers_) {
+            if (worker.joinable()) {
+                worker.join();
+            }
         }
     }
 
 private:
-    // Simulación de la inserción SQL masiva
-    void executeBatchInsert(const std::vector<SqlEvent>& batch, size_t threadId) {
-        // En producción, aquí inicializas o reúsas un "Prepared Statement"
-        // Ejemplo conceptual del comando SQL generado dinámicamente:
-        // "INSERT INTO events (...) VALUES (?,?,?...), (?,?,?...);"
-        
-        std::cout << "[Hilo Worker " << threadId << "] Insertando lote de " 
-                  << batch.size() << " eventos en la base de datos.\n";
-        
-        // Simular latencia de red/disco de la base de datos (I/O Bound)
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    void worker_loop() {
+        while (true) {
+            py::object item;
+            {
+                std::unique_lock<std::mutex> lock(mutex_);
+                available_.wait(lock, [this] { return stopping_ || !queue_.empty(); });
+                if (stopping_ && queue_.empty()) {
+                    return;
+                }
+                item = std::move(queue_.front());
+                queue_.pop();
+            }
+
+            {
+                py::gil_scoped_acquire acquire;
+                try {
+                    dispatch_(std::move(item));
+                } catch (py::error_already_set& error) {
+                    error.discard_as_unraisable("NativeAsyncManager worker");
+                }
+            }
+        }
     }
 
-    std::vector<std::thread> workers;
-    std::queue<SqlEvent> eventQueue;
-    std::mutex queueMutex;
-    std::condition_variable condition;
-    bool stop;
-    size_t maxBatchSize;
+    const size_t max_queue_size_;
+    py::function dispatch_;
+    mutable std::mutex mutex_;
+    std::mutex shutdown_mutex_;
+    std::condition_variable available_;
+    std::queue<py::object> queue_;
+    std::vector<std::thread> workers_;
+    bool stopping_ = false;
 };
 
-// Ejemplo de uso
-int main() {
-    // Inicializa un pool de 4 hilos distribuidos, procesando en lotes de 5 en 5
-    SqlEventWorkerPool dbPool(4, 5);
-
-    std::cout << "Ingestando ráfaga de eventos de telemetría...\n";
-    for (int i = 0; i < 12; ++i) {
-        SqlEvent ev;
-        ev.id = "evt_uuid_" + std::to_string(i);
-        ev.severity = (i % 3 == 0) ? "error" : "info";
-        ev.timestamp = 1713980000000 + i;
-        ev.received_at = 1713980000500 + i;
-        ev.app_name = "E-Commerce-Frontend";
-        ev.tags_json = "{\"user_type\": \"premium\"}";
-        
-        dbPool.pushEvent(std::move(ev));
-    }
-
-    // Esperar a que los hilos procesen los lotes remanentes
-    std::this_thread::sleep_for(std::chrono::seconds(1));
-    return 0;
+PYBIND11_MODULE(_async_manager, module) {
+    py::class_<NativeAsyncManager>(module, "NativeAsyncManager")
+        .def(py::init<size_t, size_t, py::function>())
+        .def("enqueue", &NativeAsyncManager::enqueue)
+        .def("empty", &NativeAsyncManager::empty)
+        .def("shutdown", &NativeAsyncManager::shutdown);
 }
