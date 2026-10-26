@@ -283,21 +283,6 @@ The [`examples/`](examples) directory contains browser reference helpers that wr
 - [`fetch-trace.js`](examples/fetch-trace.js) – JavaScript version
 - [`fetch-trace.ts`](examples/fetch-trace.ts) – TypeScript version with typed options and events
 
-The TypeScript helper can be used as follows:
-
-```typescript
-import { createFetchTrace } from "./examples/fetch-trace";
-
-const fetchTrace = createFetchTrace({
-  appName: "checkout-web",
-  appVersion: "1.0.0",
-  appStage: "production",
-  traceEndpoint: "http://localhost:8000/internal/pipeline/events"
-});
-
-const response = await fetchTrace("/api/orders");
-```
-
 Both helpers report network failures and non-success HTTP responses using the pipeline event contract while preserving the original `fetch` behavior. `resource` identifies the affected route or endpoint, while `referrer` identifies the previous page that led to the request. The current collector consumes PostgreSQL notifications; configure `traceEndpoint` to use a dedicated collector HTTP route when one becomes available.
 
 ## 5. Contribution and collaborators guide
