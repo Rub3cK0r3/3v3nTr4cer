@@ -1,171 +1,78 @@
 # 3v3nTr4cer
 
-![Release](https://img.shields.io/github/v/release/Rub3cK0r3/3v3nTr4cer)
-![Python](https://img.shields.io/badge/python-3.11%2B-blue)
-![License: MIT](https://img.shields.io/badge/license-MIT-green)
-![Status](https://img.shields.io/badge/status-in%20development-orange)
+Python event-ingestion backend with a FastAPI API and PostgreSQL storage. The
+Collector's bounded worker queue is implemented in C++17 and exposed to Python
+through CPython and pybind11. Event handling and business logic remain async
+Python.
 
-> Python backend MVP for application event ingestion, persistence, asynchronous processing and alerting.
+## Architecture
 
-`3v3nTr4cer` is a **backend-first Python project** for handling application events through a FastAPI API and PostgreSQL persistence. It includes independently structured components for event collection, asynchronous worker processing, retry handling, alert evaluation and dead-letter storage.
+Public event writes and Outbox records share a database transaction. The
+in-process publisher delivers pending records with at-least-once semantics.
+The AsyncManager queue is process-local; PostgreSQL Outbox is the durable
+handoff.
 
-The backend is the primary ingestion boundary in the current implementation. The asynchronous components use an in-memory `asyncio.Queue`, and failed events are stored in a PostgreSQL-backed dead-letter table. Docker Compose provides a reproducible development deployment, while a durable broker such as RabbitMQ or Kafka remains a future scaling option.
+`core.async_lib.async_manager.AsyncManager` preserves the Python async API:
+`start(handler)`, `enqueue(item)`, `stop()`, and `shutdown_event`. Native worker
+threads consume a bounded FIFO queue and dispatch handlers to the active asyncio
+event loop. Queue-full producers wait asynchronously, shutdown drains queued
+work, and handler exceptions are logged without stopping the pool.
 
-## 📋 Table of Contents
+Python callbacks still run under the CPython GIL, so this manager does not
+parallelize CPU-bound Python handlers. Native workers coordinate queue operations
+and async/I/O handlers.
 
-- [Features](#-features)
-- [Requirements](#-requirements)
-- [Installation](#-installation)
-- [Quick Start](#-quick-start)
-- [Usage Examples](#-usage-examples)
-- [Project Structure](#-project-structure)
-- [Configuration](#-configuration)
-- [Contributing](#-contributing)
-- [Security](#-security)
-- [AI Usage](#ai-usage)
-- [License](#-license)
+The former pure-Python implementation is archived at
+[`src/core/async_lib/legacy/async_manager.py`](src/core/async_lib/legacy/async_manager.py).
+It is deprecated and is not a runtime fallback.
 
-## ✨ Features
+## Requirements
 
-- **Modular SaaS architecture** – Use the complete platform or evolve capabilities independently
-- **Backend ingestion boundary** – FastAPI validates and persists application events
-- **Asynchronous processing** – Concurrent workers through an `asyncio.Queue`
-- **Event and alert persistence** – PostgreSQL models for events, alerts, users and failures
-- **Configurable alerting** – Severity thresholds for warning, error and fatal events
-- **Retry and dead-letter handling** – Failed processor deliveries are retained for inspection
-- **JWT authentication** – Protected public event query and creation endpoints
-- **Docker Compose deployment** – Reproducible local backend and PostgreSQL environment
+- Python 3.11+
+- C++17 compiler and Python development headers for local builds
+- PostgreSQL 14+ for local runs, or Docker Compose
 
-
-![Arquitectura del sistema](assets/3v3nTracer-diagram.png)
-
-## Modular product model
-
-The platform is designed around capabilities that can be combined or packaged separately:
-
-| Module | Responsibility | Potential product form |
-|---|---|---|
-| Backend API | Authentication, validation, event queries and PostgreSQL persistence | Core event-ingestion and observability API |
-| Collector | Receives or observes events before asynchronous processing | Client SDK, browser integration or ingestion service |
-| Event Processor | Validation, delivery retries and dead-letter routing | Processing and reliability service |
-| Alert Engine | Severity evaluation and alert persistence | Independent alerting and notification module |
-
-This modularity is a product and ownership decision, not a claim that every component already runs as a fully independent production service. The current MVP uses the backend as the official entry point:
-
-```text
-Client or fetchTrace
-  |
-  v
-FastAPI backend
-  |
-  v
-PostgreSQL
-```
-
-The backend writes an `event_outbox` record in the same transaction as each public event. The in-process Outbox publisher claims pending records and delegates delivery to the existing processor with at-least-once semantics. RabbitMQ and Kafka remain future scaling options, not current dependencies.
-
-## Architecture and Reliability
-
-```text
-Client
-  |
-  v
-FastAPI + JWT
-  |
-  +--> events
-  +--> event_outbox --FOR UPDATE SKIP LOCKED--> EventProcessor
-                                      |
-                                      +--> retry with capped backoff
-                                      +--> dead_letter_events
-```
-
-The public ingestion transaction writes the event, any severity-based alert, and
-its Outbox message together. The publisher moves messages through `pending`,
-`processing`, `published`, or `failed`, recovers stale processing claims, and
-uses `event_id` idempotency at the consumer boundary. The in-memory worker queue
-is intentionally process-local; PostgreSQL Outbox is the durable handoff.
-
-Known limitations: the current demo runs the publisher inside the backend process,
-uses a shared internal token for service authentication, and uses the development
-SQL bootstrap alongside an Alembic migration. A production deployment should use
-secret management, independent publisher scaling, observability, and a migration
-pipeline as its source of truth.
-
-## 📋 Requirements
-
-### System Requirements
-
-- **Python**: 3.11 or higher
-- **PostgreSQL**: 14 or higher (or use Docker)
-- **Docker**: 20.10+ (optional, for containerized deployment)
-- **Docker Compose**: 2.0+ (optional)
-
-### Supported Platforms
-
-- Linux (Ubuntu 20.04+, Debian 11+, CentOS 8+)
-- macOS (12.0+)
-- Windows 10/11 (with WSL2 recommended)
-
-## 🚀 Installation
-
-### Option 1: Local Installation
+## Install
 
 ```bash
 git clone https://github.com/Rub3cK0r3/3v3nTr4cer.git
 cd 3v3nTr4cer
-```
-
-### 3.2 Option A: Local Python install
-
-```bash
 python -m venv .venv
-source .venv/bin/activate  # macOS/Linux
-# .venv\Scripts\activate  # Windows
+source .venv/bin/activate
 pip install --upgrade pip
 pip install -r deploy/requirements.txt
+pip install -e .
 ```
 
-### 3.3 Option B: Docker (recommended)
+`pip install -e .` builds `core.async_lib._async_manager` from
+`src/core/async_lib/systems_impl/async_manager.cpp`. Build requirements are in
+`pyproject.toml`; the extension configuration is in `setup.py`. The Collector
+Dockerfile installs a compiler and builds the extension in the image.
+
+## Run
+
+Start the backend and PostgreSQL with:
 
 ```bash
 docker compose -f deploy/compose.yml up -d --build
 ```
 
-Check service status:
+Stop without deleting the database volume:
 
 ```bash
-docker compose ps
+docker compose -f deploy/compose.yml down
 ```
 
-Stop services:
-
-```bash
-docker compose down -v
-```
-
-### 3.4 Database initialization
-
-The Docker Compose service `db` already provisions `eventdb` and initializes `db/init/V1_schema_dev.sql`.
-
-For local PostgreSQL:
+For the local demo, run `./demo.sh`. For a local backend, initialize PostgreSQL
+and set the required environment variables:
 
 ```bash
 createdb eventdb
 psql -d eventdb -f db/init/V1_schema_dev.sql
-```
-
-### 3.5 Environment variables (optional)
-
-```bash
-export POSTGRES_USER=devuser
-export POSTGRES_PASSWORD=devpass
-export POSTGRES_DB=eventdb
-export DB_HOST=localhost
 export DATABASE_URL="postgresql://devuser:devpass@localhost:5432/eventdb"
-export SECRET_KEY="your-secret-key"
-export INTERNAL_TOKEN="your-internal-token"
-export OUTBOX_PUBLISHER_ENABLED="true"
-export ALERT_MIN_SEVERITY="error"
+export SECRET_KEY="replace-me"
+export INTERNAL_TOKEN="replace-me"
+PYTHONPATH=src uvicorn core.backend.main:app --host 0.0.0.0 --port 8000
 ```
 
 ### 3.6 One-command demo
@@ -333,66 +240,38 @@ PYTHONPATH=src python -m unittest discover -s src/tests -v
 
 ### 6.3 Database migrations
 
+## API
+
+- `POST /v1/events` and `GET /v1/events` require a Bearer token.
+- `POST /internal/pipeline/events` and `POST /internal/pipeline/alerts` require
+  `X-Internal-Token`.
+- `GET /health` and `GET /ready` report service and database readiness.
+- Browser `fetchTrace` examples are in [`examples/`](examples).
+
+## Tests and migrations
+
+Build/install the extension before running tests:
+
 ```bash
+pip install -e .
+PYTHONPATH=src pytest src/tests -q
 PYTHONPATH=src alembic upgrade head
 ```
 
-### 6.3 Started CPU-efficient implementation in C++
-Initialized systems implementation architecture setup with python/c++ bridge.
+CI follows the same install-then-test sequence in
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
-## 7. License
+## Project structure
+
+```text
+src/core/async_lib/
+  async_manager.py                 Python async adapter
+  systems_impl/async_manager.cpp   CPython extension and native worker queue
+  legacy/async_manager.py          Deprecated Python implementation
+setup.py                           Native extension build definition
+pyproject.toml                     Python build-system requirements
+```
+
+## License
 
 MIT License. See [LICENSE](LICENSE).
-
-## AI Usage
-
-GitHub Copilot was used during this MVP pass for targeted refactoring, test-oriented
-debugging, structured logging changes, retry/DLQ implementation support, and README
-updates. The human project owner made the architecture decisions, including keeping
-FastAPI as the event boundary, retaining `AsyncManager` as infrastructure, and
-choosing PostgreSQL-backed durability instead of introducing RabbitMQ or Kafka.
-
-All generated changes were reviewed in the repository, checked for type/syntax errors,
-and validated with the full unittest suite before being kept. Copilot-assisted changes
-are traceable through the working-tree diff and the corresponding phase-oriented
-change history; no code was accepted solely because it was generated. The reason for
-using AI was to accelerate repetitive implementation and documentation work while
-leaving system design, security decisions, and final verification under human review.
-
-## 8. Project structure
-
-```
-.
-├── CONTRIBUTING.md
-├── examples
-│   ├── fetch-trace.js
-│   └── fetch-trace.ts
-├── db
-│   ├── commands
-│   └── init
-├── deploy
-│   ├── compose.yml
-│   ├── docker
-│   └── requirements.txt
-├── installer.sh
-├── LICENSE
-├── logs.txt
-├── README.md
-├── setup.sh
-├── src
-│   ├── alert_engine
-│   ├── collector
-│   ├── contracts
-│   ├── core
-│   ├── processor
-│   └── tests
-└── systemd
-    ├── 3v3nTr4cer.service
-    └── setup.sh
-```
-
-## Next Steps 🏆
-We now have a **functional MVP**. 
-The next steps will focus on making it 
-work **independently** and eventually **developing**
-multiple __fully functional, "market-ready" products__.
