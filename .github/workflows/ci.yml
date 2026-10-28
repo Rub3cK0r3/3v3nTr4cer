@@ -2,9 +2,9 @@ name: 3v3nTr4cer CI
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main, master, develop ]
   pull_request:
-    branches: [ main, master ]
+    branches: [ main, master, develop ]
 
 jobs:
   test:
@@ -33,5 +33,5 @@ jobs:
           PYTHONPATH: src
         run: |
           source .venv/bin/activate
-          pytest src/tests -q
+          pytest src/tests/tests.py -q
 

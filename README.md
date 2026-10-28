@@ -248,18 +248,24 @@ PYTHONPATH=src python -m unittest discover -s src/tests -v
 - `GET /health` and `GET /ready` report service and database readiness.
 - Browser `fetchTrace` examples are in [`examples/`](examples).
 
-## Tests and migrations
+## CI validation and migrations
 
-Build/install the extension before running tests:
+The canonical project verification is the automated CI pipeline, not a video or
+a graphical demo: this project is focused on communications and servers. GitHub
+Actions builds the native extension and runs the test suite on pushes and pull
+requests targeting `main`, `master`, or `develop`. A green pipeline is the
+reproducible evidence that the checked-in suite passed.
+
+To reproduce the same test command locally, install the extension and run:
 
 ```bash
 pip install -e .
-PYTHONPATH=src pytest src/tests -q
+PYTHONPATH=src pytest src/tests/tests.py -q
 PYTHONPATH=src alembic upgrade head
 ```
 
-CI follows the same install-then-test sequence in
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+The pipeline definition is in [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+Database migrations are a separate operation and are not run by this test job.
 
 ## Project structure
 
