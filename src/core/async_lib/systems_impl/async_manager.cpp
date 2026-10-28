@@ -101,6 +101,7 @@ private:
                 } catch (py::error_already_set& error) {
                     error.discard_as_unraisable("NativeAsyncManager worker");
                 }
+                item = py::object();
             }
         }
     }

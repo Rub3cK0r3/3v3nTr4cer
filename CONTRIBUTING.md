@@ -18,7 +18,7 @@ Thanks for checking out **Core_DB**! We love contributions of any kind: code, do
 - Follow existing code style (PEP8 for Python)  
 - Keep commits small and descriptive  
 - Reference related issues in your PR (`Closes #1`)  
-- Check that tests pass (`pytest` or `docker-compose up` for integration)
+- Check that tests pass (`PYTHONPATH=src pytest src/tests/tests.py -q`)
 
 ---
 
